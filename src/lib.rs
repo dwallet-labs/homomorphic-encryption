@@ -182,7 +182,30 @@ Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
     }
 }
 
+/// A Decryption Key of an Additively Homomorphic Encryption scheme
+pub trait AdditivelyHomomorphicDecryptionKey<
+    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
+    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
+>: Into<EncryptionKey> + Clone + PartialEq
+{
+    /// The decryption key used for decryption.
+    type SecretKey;
 
+    /// Instantiate the decryption key from the public parameters of the encryption scheme,
+    /// and the secret key.
+    fn new(
+        encryption_scheme_public_parameters: &EncryptionKey::PublicParameters,
+        secret_key: Self::SecretKey,
+    ) -> Result<Self>;
+
+    /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
+    /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
+    /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
+    fn decrypt(
+        &self,
+        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
+    ) -> EncryptionKey::PlaintextSpaceGroupElement;
+}
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GroupsPublicParameters<

@@ -11,6 +11,8 @@ group = { git = "https://github.com/dwallet-labs/group.git", branch = "known_ord
 thiserror = "1.0"
 
 [dev-dependencies]
+rstest = "0.18"
+rand_core = { version = "0.6", features = ["std"] }
 
 [features]
 

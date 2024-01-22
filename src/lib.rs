@@ -1,11 +1,11 @@
 // Author: dWallet Labs, LTD.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-use std::{fmt::Debug};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 use crypto_bigint::{rand_core::CryptoRngCore, Uint};
+use group::{GroupElement, KnownOrderGroupElement, KnownOrderScalar, PartyID, Samplable};
 use serde::{Deserialize, Serialize};
-
-use group::{GroupElement, KnownOrderGroupElement, KnownOrderScalar, Samplable};
 
 /// An error in encryption related operations
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
@@ -26,7 +26,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// An Encryption Key of an Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
-Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
+    Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
 {
     type PlaintextSpaceGroupElement: KnownOrderScalar<PLAINTEXT_SPACE_SCALAR_LIMBS> + Samplable;
     type RandomnessSpaceGroupElement: GroupElement + Samplable;
@@ -40,15 +40,15 @@ Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
     /// As such, it uniquely identifies the encryption-scheme (alongside the type `Self`) and will
     /// be used for Fiat-Shamir Transcripts).
     type PublicParameters: AsRef<
-        GroupsPublicParameters<
-            PlaintextSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
-            RandomnessSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
-            CiphertextSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
-        >,
-    > + Serialize
-    + for<'r> Deserialize<'r>
-    + Clone
-    + PartialEq;
+            GroupsPublicParameters<
+                PlaintextSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
+                RandomnessSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
+                CiphertextSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
+            >,
+        > + Serialize
+        + for<'r> Deserialize<'r>
+        + Clone
+        + PartialEq;
 
     /// Returns the public parameters of this encryption scheme.
     fn public_parameters(&self) -> Self::PublicParameters {
@@ -207,6 +207,44 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     ) -> EncryptionKey::PlaintextSpaceGroupElement;
 }
 
+/// A Decryption Key Share of a Threshold Additively Homomorphic Encryption scheme
+pub trait AdditivelyHomomorphicDecryptionKeyShare<
+    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
+    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
+>: Into<EncryptionKey> + Clone + PartialEq
+{
+    /// A decryption share of a ciphertext in the process of Threshold Decryption.
+    type DecryptionShare: Clone + Debug + PartialEq + Eq;
+    /// A proof that a decryption share was correctly computed on a ciphertext using the decryption
+    /// key share `Self`.
+    type PartialDecryptionProof: Clone + Debug + PartialEq + Eq;
+    /// Precomputed values used for Threshold Decryption.
+    type PrecomputedValues: Clone + Debug + PartialEq + Eq;
+
+    /// The Semi-honest variant of Partial Decryption, returns the decryption share without proving
+    /// correctness.
+    fn generate_decryption_share_semi_honest(
+        &self,
+        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
+    ) -> Result<Self::DecryptionShare>;
+
+    /// Performs the Maliciously-secure Partial Decryption in which decryption shares are computed
+    /// and proven correct.
+    fn generate_decryption_shares(
+        &self,
+        ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
+        rng: &mut impl CryptoRngCore,
+    ) -> Result<(Vec<Self::DecryptionShare>, Self::PartialDecryptionProof)>;
+
+    /// Finalizes the Threshold Decryption protocol by combining decryption shares. This is the
+    /// Semi-Honest variant in which no proofs are verified.
+    fn combine_decryption_shares_semi_honest(
+        decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
+        encryption_key: &EncryptionKey,
+        precomputed_values: Self::PrecomputedValues,
+    ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GroupsPublicParameters<
     PlaintextSpacePublicParameters,
@@ -224,7 +262,7 @@ pub trait GroupsPublicParametersAccessors<
     RandomnessSpacePublicParameters: 'a,
     CiphertextSpacePublicParameters: 'a,
 >:
-AsRef<
+    AsRef<
     GroupsPublicParameters<
         PlaintextSpacePublicParameters,
         RandomnessSpacePublicParameters,
@@ -246,37 +284,37 @@ AsRef<
 }
 
 impl<
-    'a,
-    PlaintextSpacePublicParameters: 'a,
-    RandomnessSpacePublicParameters: 'a,
-    CiphertextSpacePublicParameters: 'a,
-    T: AsRef<
-        GroupsPublicParameters<
-            PlaintextSpacePublicParameters,
-            RandomnessSpacePublicParameters,
-            CiphertextSpacePublicParameters,
+        'a,
+        PlaintextSpacePublicParameters: 'a,
+        RandomnessSpacePublicParameters: 'a,
+        CiphertextSpacePublicParameters: 'a,
+        T: AsRef<
+            GroupsPublicParameters<
+                PlaintextSpacePublicParameters,
+                RandomnessSpacePublicParameters,
+                CiphertextSpacePublicParameters,
+            >,
         >,
-    >,
->
-GroupsPublicParametersAccessors<
-    'a,
-    PlaintextSpacePublicParameters,
-    RandomnessSpacePublicParameters,
-    CiphertextSpacePublicParameters,
-> for T
+    >
+    GroupsPublicParametersAccessors<
+        'a,
+        PlaintextSpacePublicParameters,
+        RandomnessSpacePublicParameters,
+        CiphertextSpacePublicParameters,
+    > for T
 {
 }
 
 impl<
-    PlaintextSpacePublicParameters,
-    RandomnessSpacePublicParameters,
-    CiphertextSpacePublicParameters,
-> AsRef<Self>
-for GroupsPublicParameters<
-    PlaintextSpacePublicParameters,
-    RandomnessSpacePublicParameters,
-    CiphertextSpacePublicParameters,
->
+        PlaintextSpacePublicParameters,
+        RandomnessSpacePublicParameters,
+        CiphertextSpacePublicParameters,
+    > AsRef<Self>
+    for GroupsPublicParameters<
+        PlaintextSpacePublicParameters,
+        RandomnessSpacePublicParameters,
+        CiphertextSpacePublicParameters,
+    >
 {
     fn as_ref(&self) -> &Self {
         self
@@ -303,4 +341,4 @@ group::PublicParameters<<E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE
 pub type CiphertextSpaceValue<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
 group::Value<<E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>>::CiphertextSpaceGroupElement>;
 pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
-<E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>>::PublicParameters;
+    <E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>>::PublicParameters;

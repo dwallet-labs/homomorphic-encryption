@@ -305,7 +305,6 @@ group::Value<<E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIM
 pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
     <E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>>::PublicParameters;
 
-#[cfg(test)]
 #[allow(clippy::erasing_op)]
 #[allow(clippy::identity_op)]
 pub mod tests {
@@ -313,7 +312,6 @@ pub mod tests {
     use crypto_bigint::Random;
     use crypto_bigint::{Uint, U64};
     use group::{GroupElement, KnownOrderGroupElement, Value};
-    use rand_core::OsRng;
 
     pub fn encrypt_decrypts<
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
@@ -322,6 +320,7 @@ pub mod tests {
     >(
         decryption_key: DecryptionKey,
         public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
+        rng: &mut impl CryptoRngCore,
     ) where
         DecryptionKey:
             AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
@@ -338,7 +337,7 @@ pub mod tests {
             .unwrap();
 
         let (_, ciphertext) = encryption_key
-            .encrypt(&plaintext, &public_parameters, &mut OsRng)
+            .encrypt(&plaintext, &public_parameters, rng)
             .unwrap();
 
         assert_eq!(
@@ -359,6 +358,7 @@ pub mod tests {
         decryption_key: DecryptionKey,
         evaluation_group_public_parameters: group::PublicParameters<EvaluationGroupElement>,
         public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
+        rng: &mut impl CryptoRngCore,
     ) where
         DecryptionKey:
             AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
@@ -407,15 +407,15 @@ pub mod tests {
         .unwrap();
 
         let (_, encrypted_two) = encryption_key
-            .encrypt(&two, &public_parameters, &mut OsRng)
+            .encrypt(&two, &public_parameters, rng)
             .unwrap();
 
         let (_, encrypted_five) = encryption_key
-            .encrypt(&five, &public_parameters, &mut OsRng)
+            .encrypt(&five, &public_parameters, rng)
             .unwrap();
 
         let (_, encrypted_seven) = encryption_key
-            .encrypt(&seven, &public_parameters, &mut OsRng)
+            .encrypt(&seven, &public_parameters, rng)
             .unwrap();
 
         let evaluted_ciphertext = encrypted_five.scalar_mul(&U64::from(1u64))
@@ -435,11 +435,11 @@ pub mod tests {
             decryption_key.decrypt(&evaluted_ciphertext, &public_parameters)
         );
 
-        let mask = Uint::<MASK_LIMBS>::random(&mut OsRng);
+        let mask = Uint::<MASK_LIMBS>::random(rng);
 
         let randomness = EncryptionKey::RandomnessSpaceGroupElement::sample(
             public_parameters.randomness_space_public_parameters(),
-            &mut OsRng,
+            rng,
         )
         .unwrap();
 

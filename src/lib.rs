@@ -343,7 +343,6 @@ group::Value<<E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIM
 pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
     <E as AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>>::PublicParameters;
 
-#[cfg(test)]
 #[allow(clippy::erasing_op)]
 #[allow(clippy::identity_op)]
 pub mod tests {

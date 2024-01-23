@@ -10,8 +10,6 @@ use group::{GroupElement, KnownOrderGroupElement, KnownOrderScalar, Samplable};
 /// An error in encryption related operations
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
 pub enum Error {
-    #[error("unsafe public parameters: circuit-privacy cannot be ensured by this scheme using these public parameters.")]
-    UnsafePublicParameters,
     #[error("group error")]
     GroupInstantiation(#[from] group::Error),
     #[error("zero dimension: cannot evalute a zero-dimension linear combination")]
@@ -26,7 +24,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// An Encryption Key of an Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
-    Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
+    PartialEq + Clone + Debug + Eq
 {
     type PlaintextSpaceGroupElement: KnownOrderScalar<PLAINTEXT_SPACE_SCALAR_LIMBS> + Samplable;
     type RandomnessSpaceGroupElement: GroupElement + Samplable;
@@ -49,11 +47,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         + for<'r> Deserialize<'r>
         + Clone
         + PartialEq;
-
-    /// Returns the public parameters of this encryption scheme.
-    fn public_parameters(&self) -> Self::PublicParameters {
-        self.clone().into()
-    }
 
     /// Instantiate the encryption key from the public parameters of the encryption scheme.
     fn new(public_parameters: &Self::PublicParameters) -> Result<Self>;

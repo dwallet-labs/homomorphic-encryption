@@ -62,6 +62,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         &self,
         plaintext: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
+        public_parameters: &Self::PublicParameters,
     ) -> Self::CiphertextSpaceGroupElement;
 
     /// $\Enc(pk, \pt)$: a probabilistic algorithm that first uniformly samples `randomness`
@@ -77,11 +78,11 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Self::CiphertextSpaceGroupElement,
     )> {
         let randomness = Self::RandomnessSpaceGroupElement::sample(
-            public_parameters.randomness_space_public_parameters(),
+            &public_parameters.randomness_space_public_parameters(),
             rng,
         )?;
 
-        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness);
+        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness, public_parameters);
 
         Ok((randomness, ciphertext))
     }
@@ -150,6 +151,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         modulus: &Uint<MODULUS_LIMBS>,
         mask: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
+        public_parameters: &Self::PublicParameters,
     ) -> Result<Self::CiphertextSpaceGroupElement> {
         if DIMENSION == 0 {
             return Err(Error::ZeroDimension);
@@ -171,7 +173,8 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
                 )? * mask
             };
 
-        let encryption_with_fresh_randomness = self.encrypt_with_randomness(&plaintext, randomness);
+        let encryption_with_fresh_randomness =
+            self.encrypt_with_randomness(&plaintext, randomness, public_parameters);
 
         Ok(linear_combination + encryption_with_fresh_randomness)
     }
@@ -195,6 +198,7 @@ pub trait AdditivelyHomomorphicDecryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     fn decrypt(
         &self,
         ciphertext: &Self::CiphertextSpaceGroupElement,
+        public_parameters: &Self::PublicParameters,
     ) -> Self::PlaintextSpaceGroupElement;
 }
 
@@ -311,7 +315,7 @@ pub mod tests {
         DecryptionKey: AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
     >(
         decryption_key: DecryptionKey,
-        public_parameters: DecryptionKey::PublicParameters,
+        public_parameters: &DecryptionKey::PublicParameters,
     ) {
         let plaintext: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(42u64)).into();
         let plaintext = DecryptionKey::PlaintextSpaceGroupElement::new(
@@ -321,12 +325,12 @@ pub mod tests {
         .unwrap();
 
         let (_, ciphertext) = decryption_key
-            .encrypt(&plaintext, &public_parameters, &mut OsRng)
+            .encrypt(&plaintext, public_parameters, &mut OsRng)
             .unwrap();
 
         assert_eq!(
             plaintext,
-            decryption_key.decrypt(&ciphertext),
+            decryption_key.decrypt(&ciphertext, public_parameters),
             "decrypted ciphertext should match the plaintext"
         );
     }
@@ -341,7 +345,7 @@ pub mod tests {
     >(
         decryption_key: DecryptionKey,
         evaluation_group_public_parameters: group::PublicParameters<EvaluationGroupElement>,
-        public_parameters: DecryptionKey::PublicParameters,
+        public_parameters: &DecryptionKey::PublicParameters,
     ) {
         let zero: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(0u64)).into();
         let zero = DecryptionKey::PlaintextSpaceGroupElement::new(
@@ -382,15 +386,15 @@ pub mod tests {
         .unwrap();
 
         let (_, encrypted_two) = decryption_key
-            .encrypt(&two, &public_parameters, &mut OsRng)
+            .encrypt(&two, public_parameters, &mut OsRng)
             .unwrap();
 
         let (_, encrypted_five) = decryption_key
-            .encrypt(&five, &public_parameters, &mut OsRng)
+            .encrypt(&five, public_parameters, &mut OsRng)
             .unwrap();
 
         let (_, encrypted_seven) = decryption_key
-            .encrypt(&seven, &public_parameters, &mut OsRng)
+            .encrypt(&seven, public_parameters, &mut OsRng)
             .unwrap();
 
         let evaluted_ciphertext = encrypted_five.scalar_mul(&U64::from(1u64))
@@ -407,7 +411,7 @@ pub mod tests {
 
         assert_eq!(
             expected_evaluation_result,
-            decryption_key.decrypt(&evaluted_ciphertext)
+            decryption_key.decrypt(&evaluted_ciphertext, public_parameters)
         );
 
         let mask = Uint::<MASK_LIMBS>::random(&mut OsRng);
@@ -431,6 +435,7 @@ pub mod tests {
                 )
                 .unwrap(),
                 &randomness,
+                public_parameters,
             )
             .unwrap();
 
@@ -440,14 +445,14 @@ pub mod tests {
         );
 
         assert_ne!(
-            decryption_key.decrypt(&evaluted_ciphertext),
-            decryption_key.decrypt(&privately_evaluted_ciphertext),
+            decryption_key.decrypt(&evaluted_ciphertext, public_parameters),
+            decryption_key.decrypt(&privately_evaluted_ciphertext, public_parameters),
             "decryptions of privately evaluated linear combinations should be statistically indistinguishable from straightforward ones"
         );
 
         assert_eq!(
-            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext).value()),
-            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext).value()),
+            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext, public_parameters).value()),
+            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext, public_parameters).value()),
             "decryptions of privately evaluated linear combinations should match straightforward ones modulu the evaluation group order"
         );
     }

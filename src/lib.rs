@@ -12,6 +12,8 @@ use group::{GroupElement, KnownOrderGroupElement, KnownOrderScalar, Samplable};
 pub enum Error {
     #[error("group error")]
     GroupInstantiation(#[from] group::Error),
+    #[error("decryption key cannot be instantiated throught the encryption key API: call AdditivelyHomomorphicDecryptionKey::new() instead of AdditivelyHomomorphicEncryptionKey::new()")]
+    DecryptionKeyInstantiationViaEncryptionKeyAPI,
     #[error("zero dimension: cannot evalute a zero-dimension linear combination")]
     ZeroDimension,
     #[error("an internal error that should never have happened and signifies a bug")]

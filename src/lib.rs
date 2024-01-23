@@ -60,7 +60,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         &self,
         plaintext: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
-        public_parameters: &Self::PublicParameters,
     ) -> Self::CiphertextSpaceGroupElement;
 
     /// $\Enc(pk, \pt)$: a probabilistic algorithm that first uniformly samples `randomness`
@@ -80,7 +79,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             rng,
         )?;
 
-        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness, public_parameters);
+        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness);
 
         Ok((randomness, ciphertext))
     }
@@ -149,7 +148,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         modulus: &Uint<MODULUS_LIMBS>,
         mask: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
-        public_parameters: &Self::PublicParameters,
     ) -> Result<Self::CiphertextSpaceGroupElement> {
         if DIMENSION == 0 {
             return Err(Error::ZeroDimension);
@@ -171,8 +169,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
                 )? * mask
             };
 
-        let encryption_with_fresh_randomness =
-            self.encrypt_with_randomness(&plaintext, randomness, public_parameters);
+        let encryption_with_fresh_randomness = self.encrypt_with_randomness(&plaintext, randomness);
 
         Ok(linear_combination + encryption_with_fresh_randomness)
     }
@@ -182,7 +179,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 pub trait AdditivelyHomomorphicDecryptionKey<
     const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
->: Into<EncryptionKey> + Clone + PartialEq
+>: AsRef<EncryptionKey> + Clone + PartialEq
 {
     /// The decryption key used for decryption.
     type SecretKey;
@@ -190,8 +187,8 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     /// Instantiate the decryption key from the public parameters of the encryption scheme,
     /// and the secret key.
     fn new(
-        encryption_scheme_public_parameters: &EncryptionKey::PublicParameters,
         secret_key: Self::SecretKey,
+        public_parameters: &EncryptionKey::PublicParameters,
     ) -> Result<Self>;
 
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
@@ -323,7 +320,6 @@ pub mod tests {
             AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
         EncryptionKey::PlaintextSpaceGroupElement: Debug,
     {
-        let encryption_key: EncryptionKey = decryption_key.clone().into();
         let plaintext: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(42u64)).into();
         let plaintext: EncryptionKey::PlaintextSpaceGroupElement =
             EncryptionKey::PlaintextSpaceGroupElement::new(
@@ -332,7 +328,8 @@ pub mod tests {
             )
             .unwrap();
 
-        let (_, ciphertext) = encryption_key
+        let (_, ciphertext) = decryption_key
+            .as_ref()
             .encrypt(&plaintext, &public_parameters, &mut OsRng)
             .unwrap();
 
@@ -361,8 +358,6 @@ pub mod tests {
         EncryptionKey::CiphertextSpaceGroupElement: Debug,
         EvaluationGroupElement: From<Value<EncryptionKey::PlaintextSpaceGroupElement>> + Debug,
     {
-        let encryption_key: EncryptionKey = decryption_key.clone().into();
-
         let zero: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(0u64)).into();
         let zero = EncryptionKey::PlaintextSpaceGroupElement::new(
             zero.into(),
@@ -401,15 +396,18 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_, encrypted_two) = encryption_key
+        let (_, encrypted_two) = decryption_key
+            .as_ref()
             .encrypt(&two, &public_parameters, &mut OsRng)
             .unwrap();
 
-        let (_, encrypted_five) = encryption_key
+        let (_, encrypted_five) = decryption_key
+            .as_ref()
             .encrypt(&five, &public_parameters, &mut OsRng)
             .unwrap();
 
-        let (_, encrypted_seven) = encryption_key
+        let (_, encrypted_seven) = decryption_key
+            .as_ref()
             .encrypt(&seven, &public_parameters, &mut OsRng)
             .unwrap();
 
@@ -438,7 +436,8 @@ pub mod tests {
         )
         .unwrap();
 
-        let privately_evaluted_ciphertext = encryption_key
+        let privately_evaluted_ciphertext = decryption_key
+            .as_ref()
             .evaluate_circuit_private_linear_combination_with_randomness(
                 &[one, zero, seventy_three],
                 &[encrypted_five, encrypted_seven, encrypted_two],
@@ -451,7 +450,6 @@ pub mod tests {
                 )
                 .unwrap(),
                 &randomness,
-                &public_parameters,
             )
             .unwrap();
 

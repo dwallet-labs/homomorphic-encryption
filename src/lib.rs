@@ -204,7 +204,7 @@ pub trait AdditivelyHomomorphicDecryptionKey<
 pub trait AdditivelyHomomorphicDecryptionKeyShare<
     const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
->: Into<EncryptionKey> + Clone + PartialEq
+>: AsRef<EncryptionKey> + Clone + PartialEq
 {
     /// A decryption share of a ciphertext in the process of Threshold Decryption.
     type DecryptionShare: Clone + Debug + PartialEq + Eq;

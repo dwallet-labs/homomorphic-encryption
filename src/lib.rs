@@ -181,30 +181,37 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 }
 
 /// A Decryption Key of an Additively Homomorphic Encryption scheme
-pub trait AdditivelyHomomorphicDecryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
-    AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS> + Clone + PartialEq
+pub trait AdditivelyHomomorphicDecryptionKey<
+    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
+    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
+>: AsRef<EncryptionKey> + Clone + PartialEq
 {
     /// The decryption key used for decryption.
     type SecretKey;
 
     /// Instantiate the decryption key from the public parameters of the encryption scheme,
     /// and the secret key.
-    fn new(secret_key: Self::SecretKey, public_parameters: &Self::PublicParameters)
-        -> Result<Self>;
+    fn new(
+        secret_key: Self::SecretKey,
+        public_parameters: &EncryptionKey::PublicParameters,
+    ) -> Result<Self>;
 
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
     /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
     /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
+    // TODO: this should return Result or CtOption
     fn decrypt(
         &self,
-        ciphertext: &Self::CiphertextSpaceGroupElement,
-        public_parameters: &Self::PublicParameters,
-    ) -> Self::PlaintextSpaceGroupElement;
+        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
+        public_parameters: &EncryptionKey::PublicParameters,
+    ) -> EncryptionKey::PlaintextSpaceGroupElement;
 }
 
 /// A Decryption Key Share of a Threshold Additively Homomorphic Encryption scheme
-pub trait AdditivelyHomomorphicDecryptionKeyShare<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
-    AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS> + Clone + PartialEq
+pub trait AdditivelyHomomorphicDecryptionKeyShare<
+    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
+    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
+>: AsRef<EncryptionKey> + Clone + PartialEq
 {
     /// A decryption share of a ciphertext in the process of Threshold Decryption.
     type DecryptionShare: Clone + Debug + PartialEq + Eq;
@@ -218,14 +225,14 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<const PLAINTEXT_SPACE_SCALAR_L
     /// correctness.
     fn generate_decryption_share_semi_honest(
         &self,
-        ciphertext: &Self::CiphertextSpaceGroupElement,
+        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
     ) -> Result<Self::DecryptionShare>;
 
     /// Performs the Maliciously-secure Partial Decryption in which decryption shares are computed
     /// and proven correct.
     fn generate_decryption_shares(
         &self,
-        ciphertexts: Vec<Self::CiphertextSpaceGroupElement>,
+        ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
         rng: &mut impl CryptoRngCore,
     ) -> Result<(Vec<Self::DecryptionShare>, Self::PartialDecryptionProof)>;
 
@@ -235,7 +242,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<const PLAINTEXT_SPACE_SCALAR_L
         decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         encryption_key: &Self,
         precomputed_values: Self::PrecomputedValues,
-    ) -> Result<Self::PlaintextSpaceGroupElement>;
+    ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

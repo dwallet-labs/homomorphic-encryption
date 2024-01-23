@@ -176,28 +176,24 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 }
 
 /// A Decryption Key of an Additively Homomorphic Encryption scheme
-pub trait AdditivelyHomomorphicDecryptionKey<
-    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
->: AsRef<EncryptionKey> + Clone + PartialEq
+pub trait AdditivelyHomomorphicDecryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
+    AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS> + Clone + PartialEq
 {
     /// The decryption key used for decryption.
     type SecretKey;
 
     /// Instantiate the decryption key from the public parameters of the encryption scheme,
     /// and the secret key.
-    fn new(
-        secret_key: Self::SecretKey,
-        public_parameters: &EncryptionKey::PublicParameters,
-    ) -> Result<Self>;
+    fn new(secret_key: Self::SecretKey, public_parameters: &Self::PublicParameters)
+        -> Result<Self>;
 
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
     /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
     /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
     fn decrypt(
         &self,
-        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
-    ) -> EncryptionKey::PlaintextSpaceGroupElement;
+        ciphertext: &Self::CiphertextSpaceGroupElement,
+    ) -> Self::PlaintextSpaceGroupElement;
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -310,26 +306,19 @@ pub mod tests {
 
     pub fn encrypt_decrypts<
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-        EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-        DecryptionKey,
+        DecryptionKey: AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
     >(
         decryption_key: DecryptionKey,
-        public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-    ) where
-        DecryptionKey:
-            AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-        EncryptionKey::PlaintextSpaceGroupElement: Debug,
-    {
+        public_parameters: DecryptionKey::PublicParameters,
+    ) {
         let plaintext: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(42u64)).into();
-        let plaintext: EncryptionKey::PlaintextSpaceGroupElement =
-            EncryptionKey::PlaintextSpaceGroupElement::new(
-                plaintext.into(),
-                public_parameters.plaintext_space_public_parameters(),
-            )
-            .unwrap();
+        let plaintext = DecryptionKey::PlaintextSpaceGroupElement::new(
+            plaintext.into(),
+            public_parameters.plaintext_space_public_parameters(),
+        )
+        .unwrap();
 
         let (_, ciphertext) = decryption_key
-            .as_ref()
             .encrypt(&plaintext, &public_parameters, &mut OsRng)
             .unwrap();
 
@@ -344,70 +333,61 @@ pub mod tests {
         const MASK_LIMBS: usize,
         const EVALUATION_GROUP_SCALAR_LIMBS: usize,
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-        EvaluationGroupElement: KnownOrderGroupElement<EVALUATION_GROUP_SCALAR_LIMBS>,
-        EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-        DecryptionKey,
+        EvaluationGroupElement: KnownOrderGroupElement<EVALUATION_GROUP_SCALAR_LIMBS>
+            + From<Value<DecryptionKey::PlaintextSpaceGroupElement>>,
+        DecryptionKey: AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
     >(
         decryption_key: DecryptionKey,
         evaluation_group_public_parameters: group::PublicParameters<EvaluationGroupElement>,
-        public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-    ) where
-        DecryptionKey:
-            AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-        EncryptionKey::PlaintextSpaceGroupElement: Debug,
-        EncryptionKey::CiphertextSpaceGroupElement: Debug,
-        EvaluationGroupElement: From<Value<EncryptionKey::PlaintextSpaceGroupElement>> + Debug,
-    {
+        public_parameters: DecryptionKey::PublicParameters,
+    ) {
         let zero: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(0u64)).into();
-        let zero = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let zero = DecryptionKey::PlaintextSpaceGroupElement::new(
             zero.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
 
         let one: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(1u64)).into();
-        let one = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let one = DecryptionKey::PlaintextSpaceGroupElement::new(
             one.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
         let two: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(2u64)).into();
-        let two = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let two = DecryptionKey::PlaintextSpaceGroupElement::new(
             two.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
         let five: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(5u64)).into();
-        let five = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let five = DecryptionKey::PlaintextSpaceGroupElement::new(
             five.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
         let seven: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(7u64)).into();
-        let seven = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let seven = DecryptionKey::PlaintextSpaceGroupElement::new(
             seven.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
         let seventy_three: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(73u64)).into();
-        let seventy_three = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let seventy_three = DecryptionKey::PlaintextSpaceGroupElement::new(
             seventy_three.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
         .unwrap();
 
         let (_, encrypted_two) = decryption_key
-            .as_ref()
             .encrypt(&two, &public_parameters, &mut OsRng)
             .unwrap();
 
         let (_, encrypted_five) = decryption_key
-            .as_ref()
             .encrypt(&five, &public_parameters, &mut OsRng)
             .unwrap();
 
         let (_, encrypted_seven) = decryption_key
-            .as_ref()
             .encrypt(&seven, &public_parameters, &mut OsRng)
             .unwrap();
 
@@ -417,7 +397,7 @@ pub mod tests {
 
         let expected_evaluation_result: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> =
             (&U64::from(1u64 * 5 + 0 * 7 + 73 * 2)).into();
-        let expected_evaluation_result = EncryptionKey::PlaintextSpaceGroupElement::new(
+        let expected_evaluation_result = DecryptionKey::PlaintextSpaceGroupElement::new(
             expected_evaluation_result.into(),
             public_parameters.plaintext_space_public_parameters(),
         )
@@ -430,21 +410,20 @@ pub mod tests {
 
         let mask = Uint::<MASK_LIMBS>::random(&mut OsRng);
 
-        let randomness = EncryptionKey::RandomnessSpaceGroupElement::sample(
+        let randomness = DecryptionKey::RandomnessSpaceGroupElement::sample(
             public_parameters.randomness_space_public_parameters(),
             &mut OsRng,
         )
         .unwrap();
 
         let privately_evaluted_ciphertext = decryption_key
-            .as_ref()
             .evaluate_circuit_private_linear_combination_with_randomness(
                 &[one, zero, seventy_three],
                 &[encrypted_five, encrypted_seven, encrypted_two],
                 &EvaluationGroupElement::order_from_public_parameters(
                     &evaluation_group_public_parameters,
                 ),
-                &EncryptionKey::PlaintextSpaceGroupElement::new(
+                &DecryptionKey::PlaintextSpaceGroupElement::new(
                     Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(&mask).into(),
                     public_parameters.plaintext_space_public_parameters(),
                 )

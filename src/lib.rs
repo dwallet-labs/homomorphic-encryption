@@ -10,10 +10,10 @@ use group::{GroupElement, KnownOrderGroupElement, KnownOrderScalar, Samplable};
 /// An error in encryption related operations
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
 pub enum Error {
-    #[error("unsafe public parameters: circuit-privacy cannot be ensured by this scheme using these public parameters.")]
-    UnsafePublicParameters,
     #[error("group error")]
     GroupInstantiation(#[from] group::Error),
+    #[error("wrong constructor: cannot construct without a secret, call the higher level constructor instead.")]
+    WrongConstructor,
     #[error("zero dimension: cannot evalute a zero-dimension linear combination")]
     ZeroDimension,
     #[error("an internal error that should never have happened and signifies a bug")]
@@ -26,7 +26,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// An Encryption Key of an Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
-    Into<Self::PublicParameters> + PartialEq + Clone + Debug + Eq
+    PartialEq + Clone + Debug + Eq
 {
     type PlaintextSpaceGroupElement: KnownOrderScalar<PLAINTEXT_SPACE_SCALAR_LIMBS> + Samplable;
     type RandomnessSpaceGroupElement: GroupElement + Samplable;
@@ -49,11 +49,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         + for<'r> Deserialize<'r>
         + Clone
         + PartialEq;
-
-    /// Returns the public parameters of this encryption scheme.
-    fn public_parameters(&self) -> Self::PublicParameters {
-        self.clone().into()
-    }
 
     /// Instantiate the encryption key from the public parameters of the encryption scheme.
     fn new(public_parameters: &Self::PublicParameters) -> Result<Self>;
@@ -183,28 +178,24 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 }
 
 /// A Decryption Key of an Additively Homomorphic Encryption scheme
-pub trait AdditivelyHomomorphicDecryptionKey<
-    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
->: Into<EncryptionKey> + Clone + PartialEq
+pub trait AdditivelyHomomorphicDecryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
+    AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS> + Clone + PartialEq
 {
     /// The decryption key used for decryption.
     type SecretKey;
 
     /// Instantiate the decryption key from the public parameters of the encryption scheme,
     /// and the secret key.
-    fn new(
-        encryption_scheme_public_parameters: &EncryptionKey::PublicParameters,
-        secret_key: Self::SecretKey,
-    ) -> Result<Self>;
+    fn new(secret_key: Self::SecretKey, public_parameters: &Self::PublicParameters)
+        -> Result<Self>;
 
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
     /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
     /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
     fn decrypt(
         &self,
-        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
-    ) -> EncryptionKey::PlaintextSpaceGroupElement;
+        ciphertext: &Self::CiphertextSpaceGroupElement,
+    ) -> Self::PlaintextSpaceGroupElement;
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

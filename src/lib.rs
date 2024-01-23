@@ -60,7 +60,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         &self,
         plaintext: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
-        public_parameters: &Self::PublicParameters,
     ) -> Self::CiphertextSpaceGroupElement;
 
     /// $\Enc(pk, \pt)$: a probabilistic algorithm that first uniformly samples `randomness`
@@ -80,7 +79,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             rng,
         )?;
 
-        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness, public_parameters);
+        let ciphertext = self.encrypt_with_randomness(plaintext, &randomness);
 
         Ok((randomness, ciphertext))
     }
@@ -149,7 +148,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         modulus: &Uint<MODULUS_LIMBS>,
         mask: &Self::PlaintextSpaceGroupElement,
         randomness: &Self::RandomnessSpaceGroupElement,
-        public_parameters: &Self::PublicParameters,
     ) -> Result<Self::CiphertextSpaceGroupElement> {
         if DIMENSION == 0 {
             return Err(Error::ZeroDimension);
@@ -171,8 +169,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
                 )? * mask
             };
 
-        let encryption_with_fresh_randomness =
-            self.encrypt_with_randomness(&plaintext, randomness, public_parameters);
+        let encryption_with_fresh_randomness = self.encrypt_with_randomness(&plaintext, randomness);
 
         Ok(linear_combination + encryption_with_fresh_randomness)
     }

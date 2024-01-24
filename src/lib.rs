@@ -45,8 +45,10 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             >,
         > + Serialize
         + for<'r> Deserialize<'r>
+        + PartialEq
         + Clone
-        + PartialEq;
+        + Debug
+        + Eq;
 
     /// Instantiate the encryption key from the public parameters of the encryption scheme.
     fn new(public_parameters: &Self::PublicParameters) -> Result<Self>;

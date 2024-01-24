@@ -239,12 +239,15 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
         + Debug
         + Eq;
 
+    /// An error in threshold decryption.
+    type Error: Debug;
+
     /// Instantiate the decryption key share from the public parameters of the threshold decryption scheme,
     /// and the secret key share.
     fn new(
         secret_key_share: Self::SecretKeyShare,
         public_parameters: &Self::PublicParameters,
-    ) -> Result<Self>;
+    ) -> std::result::Result<Self, Self::Error>;
 
     /// The Semi-honest variant of Partial Decryption, returns the decryption share without proving
     /// correctness.
@@ -293,7 +296,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
         decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,
-    ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
+    ) -> std::result::Result<EncryptionKey::PlaintextSpaceGroupElement, Self::Error>;
 
     /// Finalizes the Threshold Decryption protocol by combining decryption shares. This is the
     /// Maliciously-secure variant in which the corresponding zero-knowledge proofs are verified,
@@ -307,7 +310,8 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
         >,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,
-    ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
+        rng: &mut impl CryptoRngCore,
+    ) -> std::result::Result<EncryptionKey::PlaintextSpaceGroupElement, Self::Error>;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

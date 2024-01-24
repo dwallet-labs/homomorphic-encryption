@@ -293,7 +293,6 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// Correct decryption isn't assured upon success,
     /// and one should be able to verify the output independently or trust the process was done correctly.
     fn combine_decryption_shares_semi_honest(
-        encryption_key: &Self,
         decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,
@@ -303,7 +302,6 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// Maliciously-secure variant in which the corresponding zero-knowledge proofs are verified,
     /// and correct decryption is assured upon success.
     fn combine_decryption_shares(
-        encryption_key: &Self,
         ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
         decryption_shares_and_proofs: HashMap<
             PartyID,

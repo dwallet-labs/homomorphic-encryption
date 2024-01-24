@@ -219,35 +219,90 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
 >: AsRef<EncryptionKey> + Clone + PartialEq
 {
+    /// The decryption key share used for decryption.
+    type SecretKeyShare;
     /// A decryption share of a ciphertext in the process of Threshold Decryption.
     type DecryptionShare: Clone + Debug + PartialEq + Eq;
     /// A proof that a decryption share was correctly computed on a ciphertext using the decryption
     /// key share `Self`.
     type PartialDecryptionProof: Clone + Debug + PartialEq + Eq;
-    /// Precomputed values used for Threshold Decryption.
-    type PrecomputedValues: Clone + Debug + PartialEq + Eq;
+    /// A lagrange coefficient used for Threshold Decryption.
+    /// These values are passed to the `Self::combine_decryption_shares` methods
+    /// separately from `Self::PublicParameters` as they depend on the decrypter set.
+    type LagrangeCoefficient: Clone + Debug + PartialEq + Eq;
+    /// The public parameters of the threshold decryption scheme.
+    type PublicParameters: AsRef<EncryptionKey::PublicParameters>
+        + Serialize
+        + for<'r> Deserialize<'r>
+        + PartialEq
+        + Clone
+        + Debug
+        + Eq;
+
+    /// Instantiate the decryption key share from the public parameters of the threshold decryption scheme,
+    /// and the secret key share.
+    fn new(
+        secret_key: Self::SecretKeyShare,
+        public_parameters: &Self::PublicParameters,
+    ) -> Result<Self>;
 
     /// The Semi-honest variant of Partial Decryption, returns the decryption share without proving
     /// correctness.
+    ///
+    /// SECURITY NOTE: see corresponding note in [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
     fn generate_decryption_share_semi_honest(
         &self,
         ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
-    ) -> Result<Self::DecryptionShare>;
+        public_parameters: &Self::PublicParameters,
+    ) -> CtOption<Self::DecryptionShare>;
 
     /// Performs the Maliciously-secure Partial Decryption in which decryption shares are computed
     /// and proven correct.
+    ///
+    /// SECURITY NOTE: see corresponding note in [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
     fn generate_decryption_shares(
         &self,
         ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
+        public_parameters: &Self::PublicParameters,
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(Vec<Self::DecryptionShare>, Self::PartialDecryptionProof)>;
+    ) -> CtOption<(Vec<Self::DecryptionShare>, Self::PartialDecryptionProof)>;
+
+    /// Compute the lagrange coefficient of party `party_id`.
+    /// Used for threshold decryption, where the lagrange coefficients of the current decrypters set is required.
+    ///
+    /// Since the number of subsets of size `threshold` of the parties set whose size is `number_of_parties` grow super-exponentially,
+    /// these values cannot be computed ahead of time and included in `Self::PublicParameters`.
+    ///
+    /// Instead, they should be lazily computed according to the participating parties in a given threshold decryption session.
+    /// That being said, these can be cached so if there is a default set of decrypters, or one that decrypts more than once,
+    /// these values can be computed only once for that set.
+    fn compute_lagrange_coefficient(
+        party_id: PartyID,
+        number_of_parties: PartyID,
+        decrypters: Vec<PartyID>,
+        public_parameters: &Self::PublicParameters,
+    ) -> Self::LagrangeCoefficient;
 
     /// Finalizes the Threshold Decryption protocol by combining decryption shares. This is the
     /// Semi-Honest variant in which no proofs are verified.
+    ///
+    /// Correct decryption isn't assured upon success,
+    /// and one should be able to verify the output independently or trust the process was done correctly.
     fn combine_decryption_shares_semi_honest(
-        decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         encryption_key: &Self,
-        precomputed_values: Self::PrecomputedValues,
+        decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
+        lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
+        public_parameters: &Self::PublicParameters,
+    ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
+
+    /// Finalizes the Threshold Decryption protocol by combining decryption shares. This is the
+    /// Maliciously-secure variant in which the corresponding zero-knowledge proofs are verified,
+    /// and correct decryption is assured upon success.
+    fn combine_decryption_shares(
+        encryption_key: &Self,
+        decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
+        lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
+        public_parameters: &Self::PublicParameters,
     ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 

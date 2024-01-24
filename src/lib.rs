@@ -312,7 +312,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,
         rng: &mut impl CryptoRngCore,
-    ) -> std::result::Result<EncryptionKey::PlaintextSpaceGroupElement, Self::Error>;
+    ) -> std::result::Result<Vec<EncryptionKey::PlaintextSpaceGroupElement>, Self::Error>;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

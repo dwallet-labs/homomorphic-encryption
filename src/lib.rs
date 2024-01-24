@@ -242,7 +242,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// Instantiate the decryption key share from the public parameters of the threshold decryption scheme,
     /// and the secret key share.
     fn new(
-        secret_key: Self::SecretKeyShare,
+        secret_key_share: Self::SecretKeyShare,
         public_parameters: &Self::PublicParameters,
     ) -> Result<Self>;
 

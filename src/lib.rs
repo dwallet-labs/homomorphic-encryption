@@ -205,7 +205,7 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     /// In this case, this function must execute in constant time. However, that isn't sufficient; the caller must also handle the results in constant time.
     /// One way is by verifying zero-knowledge proofs before decrypting, so you only decrypt when you know you've succeeded.
     /// Another is the classic way of handling `CtOption`, which is to perform some computation over garbage (e.g. `Default`) values if `.is_none()`.
-    /// An example for this is RLWE-based key-exchange protocols, where you decrypt and if you fail you perform the computation over a garbage value and sent it anyway.
+    /// An example for this is RLWE-based key-exchange protocols, where you decrypt and if you fail you perform the computation over a garbage value and send it anyway.
     fn decrypt(
         &self,
         ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,

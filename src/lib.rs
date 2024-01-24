@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 pub enum Error {
     #[error("group error")]
     GroupInstantiation(#[from] group::Error),
-    #[error("wrong constructor: cannot construct without a secret, call the higher level constructor instead.")]
-    WrongConstructor,
     #[error("zero dimension: cannot evalute a zero-dimension linear combination")]
     ZeroDimension,
     #[error("an internal error that should never have happened and signifies a bug")]
@@ -247,7 +245,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GroupsPublicParameters<
     PlaintextSpacePublicParameters,
     RandomnessSpacePublicParameters,

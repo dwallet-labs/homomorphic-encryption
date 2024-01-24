@@ -303,7 +303,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
         ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
         decryption_shares_and_proofs: HashMap<
             PartyID,
-            (Self::DecryptionShare, Self::PartialDecryptionProof),
+            (Vec<Self::DecryptionShare>, Self::PartialDecryptionProof),
         >,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,

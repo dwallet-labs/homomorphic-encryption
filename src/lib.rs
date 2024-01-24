@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 use std::fmt::Debug;
 
+use crypto_bigint::subtle::CtOption;
 use crypto_bigint::{rand_core::CryptoRngCore, Uint};
 use serde::{Deserialize, Serialize};
 
@@ -199,12 +200,17 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
     /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
     /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
-    // TODO: this should return Result or CtOption
+    ///
+    /// SECURITY NOTE: in some decryption schemes, like RLWE-based schemes, decryption can fail, and this could in turn leak secret data if not handled carefully.
+    /// In this case, this function must execute in constant time. However, that isn't sufficient; the caller must also handle the results in constant time.
+    /// One way is by verifying zero-knowledge proofs before decrypting, so you only decrypt when you know you've succeeded.
+    /// Another is the classic way of handling `CtOption`, which is to perform some computation over garbage (e.g. `Default`) values if `.is_none()`.
+    /// An example for this is RLWE-based key-exchange protocols, where you decrypt and if you fail you perform the computation over a garbage value and sent it anyway.
     fn decrypt(
         &self,
         ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
         public_parameters: &EncryptionKey::PublicParameters,
-    ) -> EncryptionKey::PlaintextSpaceGroupElement;
+    ) -> CtOption<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

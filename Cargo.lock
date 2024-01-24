@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "group"
 version = "0.1.0"
-source = "git+https://github.com/dwallet-labs/group.git?branch=additive#597223c88525a5cd3a11e4f5d2b861ede1973905"
+source = "git+https://github.com/dwallet-labs/group.git#ebf3793e879743f90bc1c353b6a24aecc86c6ab0"
 dependencies = [
  "crypto-bigint",
  "serde",

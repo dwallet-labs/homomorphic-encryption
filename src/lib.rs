@@ -300,7 +300,10 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// and correct decryption is assured upon success.
     fn combine_decryption_shares(
         encryption_key: &Self,
-        decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
+        decryption_shares_and_proofs: HashMap<
+            PartyID,
+            (Self::DecryptionShare, Self::PartialDecryptionProof),
+        >,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,
     ) -> Result<EncryptionKey::PlaintextSpaceGroupElement>;

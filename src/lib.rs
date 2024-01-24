@@ -290,6 +290,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// and one should be able to verify the output independently or trust the process was done correctly.
     fn combine_decryption_shares_semi_honest(
         encryption_key: &Self,
+        ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
         decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
         public_parameters: &Self::PublicParameters,

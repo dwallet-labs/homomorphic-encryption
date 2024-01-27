@@ -574,16 +574,12 @@ pub mod tests {
     pub fn encrypt_decrypts<
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
         EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-        DecryptionKey,
+        DecryptionKey: AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
     >(
         decryption_key: DecryptionKey,
         public_parameters: &EncryptionKey::PublicParameters,
         rng: &mut impl CryptoRngCore,
-    ) where
-        DecryptionKey:
-            AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-        EncryptionKey::PlaintextSpaceGroupElement: Debug,
-    {
+    ) {
         let encryption_key = decryption_key.as_ref();
 
         let plaintext: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = (&U64::from(42u64)).into();
@@ -610,7 +606,7 @@ pub mod tests {
     pub fn evaluates<
         const EVALUATION_GROUP_SCALAR_LIMBS: usize,
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-        EvaluationGroupElement: KnownOrderGroupElement<EVALUATION_GROUP_SCALAR_LIMBS>,
+        EvaluationGroupElement: KnownOrderScalar<EVALUATION_GROUP_SCALAR_LIMBS>,
         EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         DecryptionKey,
     >(
@@ -621,9 +617,6 @@ pub mod tests {
     ) where
         DecryptionKey:
             AdditivelyHomomorphicDecryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
-        EncryptionKey::PlaintextSpaceGroupElement: Debug,
-        EncryptionKey::CiphertextSpaceGroupElement: Debug,
-        EvaluationGroupElement: From<Value<EncryptionKey::PlaintextSpaceGroupElement>> + Debug,
     {
         let encryption_key = decryption_key.as_ref();
 
@@ -744,8 +737,8 @@ pub mod tests {
         );
 
         assert_eq!(
-            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap().value()),
-            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap().value()),
+            EvaluationGroupElement::new(Uint::<EVALUATION_GROUP_SCALAR_LIMBS>::from(&decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap().value().into()).into(), evaluation_group_public_parameters).unwrap(),
+            EvaluationGroupElement::new(Uint::<EVALUATION_GROUP_SCALAR_LIMBS>::from(&decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap().value().into()).into(), evaluation_group_public_parameters).unwrap(),
             "decryptions of privately evaluated linear combinations should match straightforward ones modulu the evaluation group order"
         );
     }

@@ -605,13 +605,20 @@ pub mod tests {
         )
         .unwrap();
 
+        let evaluation_order = (&EvaluationGroupElement::order_from_public_parameters(
+            &evaluation_group_public_parameters,
+        ))
+            .into();
+
         let privately_evaluted_ciphertext = encryption_key
             .evaluate_circuit_private_linear_combination_with_randomness(
                 &[one, zero, seventy_three],
-                &[encrypted_five, encrypted_seven, encrypted_two],
-                &EvaluationGroupElement::order_from_public_parameters(
-                    &evaluation_group_public_parameters,
-                ),
+                [
+                    (encrypted_five, evaluation_order),
+                    (encrypted_seven, evaluation_order),
+                    (encrypted_two, evaluation_order),
+                ],
+                &evaluation_order,
                 &EncryptionKey::PlaintextSpaceGroupElement::new(
                     Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(&mask).into(),
                     public_parameters.plaintext_space_public_parameters(),

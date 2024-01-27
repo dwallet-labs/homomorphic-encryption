@@ -569,7 +569,7 @@ pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
 pub mod tests {
     use super::*;
     use crypto_bigint::{Uint, U64};
-    use group::{GroupElement, KnownOrderGroupElement, Value};
+    use group::{GroupElement, Value};
 
     pub fn encrypt_decrypts<
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
@@ -606,7 +606,8 @@ pub mod tests {
     pub fn evaluates<
         const EVALUATION_GROUP_SCALAR_LIMBS: usize,
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
-        EvaluationGroupElement: KnownOrderScalar<EVALUATION_GROUP_SCALAR_LIMBS>,
+        EvaluationGroupElement: KnownOrderScalar<EVALUATION_GROUP_SCALAR_LIMBS>
+            + From<Value<EncryptionKey::PlaintextSpaceGroupElement>>,
         EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         DecryptionKey,
     >(
@@ -737,8 +738,8 @@ pub mod tests {
         );
 
         assert_eq!(
-            EvaluationGroupElement::new(Uint::<EVALUATION_GROUP_SCALAR_LIMBS>::from(&decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap().value().into()).into(), evaluation_group_public_parameters).unwrap(),
-            EvaluationGroupElement::new(Uint::<EVALUATION_GROUP_SCALAR_LIMBS>::from(&decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap().value().into()).into(), evaluation_group_public_parameters).unwrap(),
+            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap().value()),
+            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap().value()),
             "decryptions of privately evaluated linear combinations should match straightforward ones modulu the evaluation group order"
         );
     }

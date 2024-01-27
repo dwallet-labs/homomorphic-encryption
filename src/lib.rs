@@ -577,7 +577,7 @@ pub mod tests {
         DecryptionKey,
     >(
         decryption_key: DecryptionKey,
-        public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
+        public_parameters: &EncryptionKey::PublicParameters,
         rng: &mut impl CryptoRngCore,
     ) where
         DecryptionKey:

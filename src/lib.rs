@@ -568,7 +568,6 @@ pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
 #[allow(clippy::identity_op)]
 pub mod tests {
     use super::*;
-    use crypto_bigint::Random;
     use crypto_bigint::{Uint, U64};
     use group::{GroupElement, KnownOrderGroupElement, Value};
 
@@ -609,7 +608,6 @@ pub mod tests {
     }
 
     pub fn evaluates<
-        const MASK_LIMBS: usize,
         const EVALUATION_GROUP_SCALAR_LIMBS: usize,
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
         EvaluationGroupElement: KnownOrderGroupElement<EVALUATION_GROUP_SCALAR_LIMBS>,
@@ -617,8 +615,8 @@ pub mod tests {
         DecryptionKey,
     >(
         decryption_key: DecryptionKey,
-        evaluation_group_public_parameters: group::PublicParameters<EvaluationGroupElement>,
-        public_parameters: PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
+        evaluation_group_public_parameters: &EvaluationGroupElement::PublicParameters,
+        public_parameters: &PublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, EncryptionKey>,
         rng: &mut impl CryptoRngCore,
     ) where
         DecryptionKey:
@@ -698,8 +696,6 @@ pub mod tests {
                 .unwrap()
         );
 
-        let mask = Uint::<MASK_LIMBS>::random(rng);
-
         let randomness = EncryptionKey::RandomnessSpaceGroupElement::sample(
             public_parameters.randomness_space_public_parameters(),
             rng,
@@ -711,20 +707,26 @@ pub mod tests {
         ))
             .into();
 
+        let ciphertexts_and_upper_bounds = [
+            (encrypted_five, evaluation_order),
+            (encrypted_seven, evaluation_order),
+            (encrypted_two, evaluation_order),
+        ];
+
+        let mask = EncryptionKey::sample_mask_for_secure_function_evaluation(
+            &ciphertexts_and_upper_bounds,
+            &evaluation_order,
+            public_parameters,
+            rng,
+        )
+        .unwrap();
+
         let privately_evaluted_ciphertext = encryption_key
             .evaluate_circuit_private_linear_combination_with_randomness(
                 &[one, zero, seventy_three],
-                [
-                    (encrypted_five, evaluation_order),
-                    (encrypted_seven, evaluation_order),
-                    (encrypted_two, evaluation_order),
-                ],
+                ciphertexts_and_upper_bounds,
                 &evaluation_order,
-                &EncryptionKey::PlaintextSpaceGroupElement::new(
-                    Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(&mask).into(),
-                    public_parameters.plaintext_space_public_parameters(),
-                )
-                .unwrap(),
+                &mask,
                 &randomness,
                 &public_parameters,
             )

@@ -12,7 +12,7 @@ use group::{
     StatisticalSecuritySizedNumber,
 };
 
-/// An error in encryption related operations
+/// An error in encryption related operations.
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
 pub enum Error {
     #[error("group error")]
@@ -26,7 +26,7 @@ pub enum Error {
 }
 
 /// The Result of the `new()` operation of types implementing the
-/// `AdditivelyHomomorphicEncryptionKey` trait
+/// [`AdditivelyHomomorphicEncryptionKey`] trait.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An Encryption Key of an Additively Homomorphic Encryption scheme.
@@ -94,10 +94,13 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Ok((randomness, ciphertext))
     }
 
-    /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Efficient homomorphic evaluation of the
-    /// linear combination defined by `coefficients` and `ciphertexts`.
+    /// Efficient homomorphic evaluation of the linear 
+    /// combination defined by `coefficients` and `ciphertexts`.
+    /// Returns $a_1 \odot \ct_1 \oplus \ldots \oplus a_t \odot \ct_t$.
+    /// For an affine transformation, augment ciphertexts with $\ct_{t+1} = \Enc(1)$.
     ///
-    /// This method *does not assure circuit privacy*.
+    /// SECURITY NOTE: This method *doesn't* assure circuit privacy.
+    /// For circuit private implementation, use [`Self::evaluate_circuit_private_linear_combination`].
     fn evaluate_linear_combination<const DIMENSION: usize>(
         coefficients: &[Self::PlaintextSpaceGroupElement; DIMENSION],
         ciphertexts: &[Self::CiphertextSpaceGroupElement; DIMENSION],
@@ -116,7 +119,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         ))
     }
 
-    /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Secure function evaluation.
+    /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \omega, \eta)$: Secure function evaluation.
     ///
     /// This function securely computes an efficient homomorphic evaluation of the
     /// linear combination defined by `coefficients` and `ciphertexts`:
@@ -131,11 +134,11 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     /// except what can be learned from the (decrypted) result alone.
     ///
     /// This is ensured by masking the linear combination with a random (`mask`)
-    /// multiplication $\omega$ of the `modulus` $q$ using fresh `randomness` $\eta$:
-    /// \ct = \Enc(pk,a_0 + \omega q; \eta) \bigoplus_{i=1}^\ell \left(  a_i \odot \ct_i  \right)
+    /// multiplication $\omega$ of the `modulus` $q$, and adding a fresh `randomness` $\eta$, which can be thought of as decrypting and re-encrypting with a fresh randomness:
+    /// \ct = \Enc(pk, \omega q; \eta) \bigoplus_{i=1}^\ell \left(  a_i \odot \ct_i  \right)
     ///
     /// Let $\PT_i$ be the upper bound associated with $\ct_i$ (that is, this is the maximal value
-    /// one obtains from decrypting $\ct_i$, but without reducing modulo $q$)},
+    /// one obtains from decrypting $\ct_i$, but without reducing modulo $q$),
     /// where $\omega$ is uniformly chosen from $[0,2^s\PTsum)$ and $\eta$ is uniformly chosen from $\ZZ_N^*$.
     /// Then, the upper bound associated with the resulting $\ct$ is
     /// $$ \PT_{\sf eval} = q + (2^s+1)\cdot q\cdot \PTsum $$ and

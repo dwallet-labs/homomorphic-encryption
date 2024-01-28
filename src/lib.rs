@@ -333,7 +333,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     }
 }
 
-/// A Decryption Key of an Additively Homomorphic Encryption scheme
+/// A Decryption Key of an Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicDecryptionKey<
     const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,

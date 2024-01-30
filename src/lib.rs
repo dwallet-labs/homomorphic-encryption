@@ -4,8 +4,8 @@
 use std::fmt::Debug;
 use std::ops::BitAnd;
 
-use crypto_bigint::subtle::Choice;
 use crypto_bigint::subtle::ConstantTimeLess;
+use crypto_bigint::subtle::{Choice, CtOption};
 use crypto_bigint::CheckedAdd;
 use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
 use crypto_bigint::{NonZero, RandomMod};
@@ -333,6 +333,38 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 
         Ok((mask, randomness, evaluated_ciphertext))
     }
+}
+
+/// A Decryption Key of an Additively Homomorphic Encryption scheme.
+pub trait AdditivelyHomomorphicDecryptionKey<
+    const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
+    EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
+>: AsRef<EncryptionKey> + Clone + PartialEq
+{
+    /// The decryption key used for decryption.
+    type SecretKey;
+
+    /// Instantiate the decryption key from the public parameters of the encryption scheme,
+    /// and the secret key.
+    fn new(
+        secret_key: Self::SecretKey,
+        public_parameters: &EncryptionKey::PublicParameters,
+    ) -> Result<Self>;
+
+    /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
+    /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
+    /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
+    ///
+    /// SECURITY NOTE: in some decryption schemes, like RLWE-based schemes, decryption can fail, and this could in turn leak secret data if not handled carefully.
+    /// In this case, this function must execute in constant time. However, that isn't sufficient; the caller must also handle the results in constant time.
+    /// One way is by verifying zero-knowledge proofs before decrypting, so you only decrypt when you know you've succeeded.
+    /// Another is the classic way of handling `CtOption`, which is to perform some computation over garbage (e.g. `Default`) values if `.is_none()`.
+    /// An example for this is RLWE-based key-exchange protocols, where you decrypt and if you fail you perform the computation over a garbage value and send it anyway.
+    fn decrypt(
+        &self,
+        ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
+        public_parameters: &EncryptionKey::PublicParameters,
+    ) -> CtOption<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

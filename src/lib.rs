@@ -1,18 +1,21 @@
-// Author: dWallet Labs, LTD.
+// Author: dWallet Labs, Ltd.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-use crypto_bigint::subtle::CtOption;
+
+use std::fmt::Debug;
+use std::ops::BitAnd;
+
+use crypto_bigint::subtle::ConstantTimeLess;
+use crypto_bigint::subtle::{Choice, CtOption};
+use crypto_bigint::CheckedAdd;
 use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
 use crypto_bigint::{NonZero, RandomMod};
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-
-use crypto_bigint::CheckedAdd;
 use group::{
     GroupElement, KnownOrderGroupElement, KnownOrderScalar, Samplable,
     StatisticalSecuritySizedNumber,
 };
+use serde::{Deserialize, Serialize};
 
-/// An error in encryption related operations
+/// An error in encryption related operations.
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
 pub enum Error {
     #[error("group error")]
@@ -21,12 +24,12 @@ pub enum Error {
     ZeroDimension,
     #[error("an internal error that should never have happened and signifies a bug")]
     InternalError,
-    #[error("circuit privacy cannot be assured in the requested evaluation")]
-    CircuitPrivacy,
+    #[error("the requested function cannot be securely evaluated")]
+    SecureFunctionEvaluation,
 }
 
 /// The Result of the `new()` operation of types implementing the
-/// `AdditivelyHomomorphicEncryptionKey` trait
+/// [`AdditivelyHomomorphicEncryptionKey`] trait.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An Encryption Key of an Additively Homomorphic Encryption scheme.
@@ -94,10 +97,13 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Ok((randomness, ciphertext))
     }
 
-    /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Efficient homomorphic evaluation of the
-    /// linear combination defined by `coefficients` and `ciphertexts`.
+    /// Efficient homomorphic evaluation of the linear
+    /// combination defined by `coefficients` and `ciphertexts`.
+    /// Returns $a_1 \odot \ct_1 \oplus \ldots \oplus a_\ell \odot \ct_\ell$.
+    /// For an affine transformation, prepend ciphertexts with $\ct_0 = \Enc(1)$.
     ///
-    /// This method *does not assure circuit privacy*.
+    /// SECURITY NOTE: This method *doesn't* assure circuit privacy.
+    /// For circuit private implementation, use [`Self::securely_evaluate_linear_combination`].
     fn evaluate_linear_combination<const DIMENSION: usize>(
         coefficients: &[Self::PlaintextSpaceGroupElement; DIMENSION],
         ciphertexts: &[Self::CiphertextSpaceGroupElement; DIMENSION],
@@ -116,29 +122,28 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         ))
     }
 
-    /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Secure function evaluation.
+    /// $\Eval(pk,f, \ct_1,\ldots,\ct_\ell; \omega, \eta)$: Secure function evaluation.
     ///
     /// This function securely computes an efficient homomorphic evaluation of the
     /// linear combination defined by `coefficients` and `ciphertexts`:
-    /// $f(x_1,\ldots,x_\ell)=\sum_{i=0}^{\ell}{a_i x_i}$ where
+    /// $f(x_1,\ldots,x_\ell)=\sum_{i=1}^{\ell}{a_i x_i}$ where
     /// $a_i\in [0,q)$, and $\ell$ ciphertexts $\ct_1,\ldots,\ct_\ell$.
     ///
-    /// In order to perform an affine evaluation, the free variable should be paired with an
-    /// encryption of one.
+    /// For an affine transformation, prepend ciphertexts with $\ct_0 = \Enc(1)$.
     ///
     /// _Secure function evaluation_ states that giving the resulting ciphertext of the above evaluation
     /// to the decryption key owner for decryption does not reveal anything about $f$
     /// except what can be learned from the (decrypted) result alone.
     ///
     /// This is ensured by masking the linear combination with a random (`mask`)
-    /// multiplication $\omega$ of the `modulus` $q$ using fresh `randomness` $\eta$:
-    /// \ct = \Enc(pk,a_0 + \omega q; \eta) \bigoplus_{i=1}^\ell \left(  a_i \odot \ct_i  \right)
+    /// multiplication $\omega$ of the `modulus` $q$, and adding a fresh `randomness` $\eta$, which can be thought of as decrypting and re-encrypting with a fresh randomness:
+    /// \ct = \Enc(pk, \omega q; \eta) \bigoplus_{i=1}^\ell \left(  a_i \odot \ct_i  \right)
     ///
     /// Let $\PT_i$ be the upper bound associated with $\ct_i$ (that is, this is the maximal value
-    /// one obtains from decrypting $\ct_i$, but without reducing modulo $q$)},
+    /// one obtains from decrypting $\ct_i$, but without reducing modulo $q$),
     /// where $\omega$ is uniformly chosen from $[0,2^s\PTsum)$ and $\eta$ is uniformly chosen from $\ZZ_N^*$.
     /// Then, the upper bound associated with the resulting $\ct$ is
-    /// $$ \PT_{\sf eval} = q + (2^s+1)\cdot q\cdot \PTsum $$ and
+    /// $$ \PT_{\sf eval} = (2^s+1)\cdot q\cdot \PTsum $$ and
     /// Correctness is assured as long as $\PT_{\sf eval}<N$.
     ///
     /// In more detail, these steps are taken to generically assure circuit privacy:
@@ -159,7 +164,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     ///    An exception to the above is when the ciphertext was encrypted by the caller,
     ///    in which case the caller knows the corresponding plaintext.
     ///
-    ///
     /// 3. No modulations. The size of our evaluation $\PT_{\sf eval}$ should be smaller than the order of
     ///    the encryption plaintext group $N$ in order to assure it does not go through modulation
     ///    in the plaintext space.
@@ -168,9 +172,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     /// skipped.
     ///
     /// See: Definition $2.1, B.2, B.3, D.1$ in "2PC-MPC: Threshold ECDSA in $\calO(1)$".
-    // TODO: decide when to use secure function evaluation, when to use circuit privacy. @dolevmu
-    // TODO: translate equations from affine to linear combination in both the doc and the code
-    fn evaluate_circuit_private_linear_combination_with_randomness<const DIMENSION: usize>(
+    fn securely_evaluate_linear_combination_with_randomness<const DIMENSION: usize>(
         &self,
         coefficients: &[Self::PlaintextSpaceGroupElement; DIMENSION],
         ciphertexts_and_upper_bounds: [(
@@ -186,27 +188,10 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             return Err(Error::ZeroDimension);
         }
 
-        // First, verify that each coefficient $a_i$ is smaller then the modulus $q$.
-        if coefficients
-            .iter()
-            .any(|coefficient| &coefficient.value().into() >= modulus)
-        {
-            return Err(Error::CircuitPrivacy);
-        }
-
-        // TODO: should I verify that the mask $\omega$ is chosen from $[0,2^s\PTsum)$, or just that mask + the eval bound < N? @dolevmu
-        // Finally, verify that the evaluation upper bound $\PT_{\sf eval}$ is smaller than the plaintext modulus $N$.
-        let plaintext_order: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> = coefficients[0].order();
-        let evaluation_upper_bound =
-            Self::evaluation_upper_bound(&ciphertexts_and_upper_bounds, modulus)?;
-        let secure_evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
-            evaluation_upper_bound.checked_add(&mask.value().into()),
-        )
-        .ok_or(Error::CircuitPrivacy)?;
-
-        if secure_evaluation_upper_bound > plaintext_order {
-            return Err(Error::CircuitPrivacy);
-        }
+        let plaintext_order: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> =
+            Self::PlaintextSpaceGroupElement::order_from_public_parameters(
+                public_parameters.plaintext_space_public_parameters(),
+            );
 
         let ciphertexts = ciphertexts_and_upper_bounds
             .clone()
@@ -219,6 +204,36 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         let plaintext = if &plaintext_order == modulus {
             coefficients[0].neutral()
         } else {
+            // Verify that the secure evaluation upper bound $\PT_{\sf eval}$ is smaller than the plaintext modulus $N$.
+            // This is done first by multiplying each of the coefficients by the corresponding upper bound:
+            let evaluation_upper_bound: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> =
+                ciphertexts_and_upper_bounds
+                    .iter()
+                    .map(|(_, upper_bound)| upper_bound)
+                    .zip(coefficients.iter())
+                    .map(|(upper_bound, coefficient)| {
+                        coefficient.value().into().checked_mul(upper_bound)
+                    })
+                    .reduce(|a, b| a.and_then(|a| b.and_then(|b| a.checked_add(&b))))
+                    .and_then(|evaluation_upper_bound| evaluation_upper_bound.into())
+                    .ok_or(Error::SecureFunctionEvaluation)?;
+
+            // And then adding the mask by modulus $ \omega q $, to result with the secure evaluation upper bound $\PT_{\sf eval}$:
+            let secure_evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
+                mask.value()
+                    .into()
+                    .checked_mul(modulus)
+                    .and_then(|mask_by_modulus| {
+                        evaluation_upper_bound.checked_add(&mask_by_modulus)
+                    }),
+            )
+            .ok_or(Error::SecureFunctionEvaluation)?;
+
+            // And finally checking that it is smaller than the plaintext order $ $\PT_{\sf eval}$ < N $:
+            if secure_evaluation_upper_bound >= plaintext_order {
+                return Err(Error::SecureFunctionEvaluation);
+            }
+
             let modulus = Self::PlaintextSpaceGroupElement::new(
                 Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(modulus).into(),
                 &coefficients[0].public_parameters(),
@@ -233,52 +248,29 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Ok(linear_combination + encryption_with_fresh_randomness)
     }
 
-    /// $$ q\cdot \PTsum $$: Computes the evaluation upper bound of the linear combination of `ciphertexts`,
-    /// each bounded by the corresponding `upper_bounds`, and coefficients, each bounded by `modulus`.
-    ///
-    /// Not to be confused with the secure evaluation upper bound $\PT_{\sf eval}$ to which a mask is added.
-    fn evaluation_upper_bound<const DIMENSION: usize>(
-        ciphertexts_and_upper_bounds: &[(
-            Self::CiphertextSpaceGroupElement,
-            Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-        ); DIMENSION],
-        modulus: &Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-    ) -> Result<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>> {
-        let upper_bounds_sum = ciphertexts_and_upper_bounds
-            .iter()
-            .map(|(_, upper_bound)| upper_bound)
-            .fold(Some(Uint::ZERO), |sum, upper_bound| {
-                sum.and_then(|sum| sum.checked_add(upper_bound).into())
-            })
-            .ok_or(Error::CircuitPrivacy)?;
-
-        Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(upper_bounds_sum.checked_mul(&modulus))
-            .ok_or(Error::CircuitPrivacy)
-    }
-
     /// Samples the mask $\omega$ is uniformly from $[0,2^s\PTsum)$, as required for secure function evaluation.
     fn sample_mask_for_secure_function_evaluation<const DIMENSION: usize>(
         ciphertexts_and_upper_bounds: &[(
             Self::CiphertextSpaceGroupElement,
             Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         ); DIMENSION],
-        modulus: &Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         public_parameters: &Self::PublicParameters,
         rng: &mut impl CryptoRngCore,
     ) -> Result<Self::PlaintextSpaceGroupElement> {
-        let evaluation_upper_bound =
-            Self::evaluation_upper_bound(&ciphertexts_and_upper_bounds, modulus)?;
+        let upper_bounds_sum = ciphertexts_and_upper_bounds
+            .iter()
+            .map(|(_, upper_bound)| upper_bound)
+            .fold(Some(Uint::ZERO), |sum, upper_bound| {
+                sum.and_then(|sum| sum.checked_add(upper_bound).into())
+            })
+            .ok_or(Error::SecureFunctionEvaluation)?;
 
-        let mask_upper_bound =
-            Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(&StatisticalSecuritySizedNumber::MAX)
-                .checked_add(&Uint::ONE)
-                .and_then(|statistical_security_parameter| {
-                    evaluation_upper_bound.checked_mul(&statistical_security_parameter)
-                });
+        let mask_upper_bound = upper_bounds_sum.checked_mul(
+            &(Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::ONE << StatisticalSecuritySizedNumber::BITS),
+        );
 
-        let mask_upper_bound =
-            Option::<NonZero<_>>::from(mask_upper_bound.and_then(|bound| NonZero::new(bound)))
-                .ok_or(Error::CircuitPrivacy)?;
+        let mask_upper_bound = Option::<NonZero<_>>::from(mask_upper_bound.and_then(NonZero::new))
+            .ok_or(Error::SecureFunctionEvaluation)?;
 
         let mask = Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::random_mod(rng, &mask_upper_bound);
 
@@ -291,8 +283,8 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Secure function evaluation.
     ///
     /// This is the probabilistic linear combination algorithm which samples `mask` and `randomness`
-    /// from `rng` and calls [`Self::evaluate_circuit_private_linear_combination_with_randomness()`].
-    fn evaluate_circuit_private_linear_combination<const DIMENSION: usize>(
+    /// from `rng` and calls [`Self::securely_evaluate_linear_combination_with_randomness()`].
+    fn securely_evaluate_linear_combination<const DIMENSION: usize>(
         &self,
         coefficients: &[Self::PlaintextSpaceGroupElement; DIMENSION],
         ciphertexts_and_upper_bounds: [(
@@ -312,28 +304,38 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             rng,
         )?;
 
+        // First, verify that each coefficient $a_i$ is smaller then the modulus $q$.
+        if !bool::from(
+            coefficients
+                .iter()
+                .fold(Choice::from(1u8), |choice, coefficient| {
+                    choice.bitand(coefficient.value().into().ct_lt(modulus))
+                }),
+        ) {
+            return Err(Error::SecureFunctionEvaluation);
+        }
+
+        // Then sample the mask uniformly from $[0,2^s\PTsum)$.
         let mask = Self::sample_mask_for_secure_function_evaluation(
             &ciphertexts_and_upper_bounds,
-            modulus,
             public_parameters,
             rng,
         )?;
 
-        let evaluated_ciphertext = self
-            .evaluate_circuit_private_linear_combination_with_randomness(
-                coefficients,
-                ciphertexts_and_upper_bounds,
-                modulus,
-                &mask,
-                &randomness,
-                public_parameters,
-            )?;
+        let evaluated_ciphertext = self.securely_evaluate_linear_combination_with_randomness(
+            coefficients,
+            ciphertexts_and_upper_bounds,
+            modulus,
+            &mask,
+            &randomness,
+            public_parameters,
+        )?;
 
         Ok((mask, randomness, evaluated_ciphertext))
     }
 }
 
-/// A Decryption Key of an Additively Homomorphic Encryption scheme
+/// A Decryption Key of an Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicDecryptionKey<
     const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,
@@ -466,9 +468,10 @@ pub type PublicParameters<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize, E> =
 #[allow(clippy::erasing_op)]
 #[allow(clippy::identity_op)]
 pub mod tests {
-    use super::*;
     use crypto_bigint::{Uint, U64};
     use group::{GroupElement, Value};
+
+    use super::*;
 
     pub fn encrypt_decrypts<
         const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
@@ -608,20 +611,19 @@ pub mod tests {
 
         let mask = EncryptionKey::sample_mask_for_secure_function_evaluation(
             &ciphertexts_and_upper_bounds,
-            &evaluation_order,
             public_parameters,
             rng,
         )
         .unwrap();
 
         let privately_evaluted_ciphertext = encryption_key
-            .evaluate_circuit_private_linear_combination_with_randomness(
+            .securely_evaluate_linear_combination_with_randomness(
                 &[one, zero, seventy_three],
                 ciphertexts_and_upper_bounds,
                 &evaluation_order,
                 &mask,
                 &randomness,
-                &public_parameters,
+                public_parameters,
             )
             .unwrap();
 

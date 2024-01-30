@@ -1,8 +1,8 @@
 // Author: dWallet Labs, Ltd.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
-use crypto_bigint::subtle::Choice;
-use crypto_bigint::subtle::ConstantTimeLess;
+use std::fmt::Debug;
+
 use crypto_bigint::CheckedAdd;
 use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
 use crypto_bigint::{NonZero, RandomMod};
@@ -11,8 +11,6 @@ use group::{
     StatisticalSecuritySizedNumber,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use std::ops::BitAnd;
 
 /// An error in encryption related operations.
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
@@ -203,28 +201,36 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         let plaintext = if &plaintext_order == modulus {
             coefficients[0].neutral()
         } else {
-            // First, verify that each coefficient $a_i$ is smaller then the modulus $q$.
-            if !bool::from(
-                coefficients
+            // Verify that the secure evaluation upper bound $\PT_{\sf eval}$ is smaller than the plaintext modulus $N$.
+            // This is done first by multiplying each of the coefficients by the corresponding upper bound:
+            let evaluation_upper_bound: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> =
+                ciphertexts_and_upper_bounds
                     .iter()
-                    .fold(Choice::from(1u8), |choice, coefficient| {
-                        choice.bitand(coefficient.value().into().ct_lt(modulus))
-                    }),
-            ) {
-                return Err(Error::SecureFunctionEvaluation);
-            }
+                    .map(|(_, upper_bound)| upper_bound)
+                    .zip(coefficients.iter())
+                    .map(|(upper_bound, coefficient)| {
+                        coefficient.value().into().checked_mul(upper_bound)
+                    })
+                    .reduce(|a, b| a.and_then(|a| b.and_then(|b| a.checked_add(&b))))
+                    .and_then(|evaluation_upper_bound| evaluation_upper_bound.into())
+                    .ok_or(Error::SecureFunctionEvaluation)?;
 
-            // Finally, verify that the evaluation upper bound $\PT_{\sf eval}$ is smaller than the plaintext modulus $N$.
-            let evaluation_upper_bound =
-                Self::evaluation_upper_bound(&ciphertexts_and_upper_bounds, modulus)?;
+            // And then adding the mask by modulus $ \omega q $, to result with the secure evaluation upper bound $\PT_{\sf eval}$:
             let secure_evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
-                evaluation_upper_bound.checked_add(&mask.value().into()),
+                mask.value()
+                    .into()
+                    .checked_mul(modulus)
+                    .and_then(|mask_by_modulus| {
+                        evaluation_upper_bound.checked_add(&mask_by_modulus)
+                    }),
             )
             .ok_or(Error::SecureFunctionEvaluation)?;
 
+            // And finally checking that it is smaller than the plaintext order $ $\PT_{\sf eval}$ < N $:
             if secure_evaluation_upper_bound >= plaintext_order {
                 return Err(Error::SecureFunctionEvaluation);
             }
+
             let modulus = Self::PlaintextSpaceGroupElement::new(
                 Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::from(modulus).into(),
                 &coefficients[0].public_parameters(),
@@ -239,29 +245,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Ok(linear_combination + encryption_with_fresh_randomness)
     }
 
-    /// $$ q\cdot \PTsum $$: Computes the evaluation upper bound of the linear combination of `ciphertexts`,
-    /// each bounded by the corresponding `upper_bounds`, and coefficients, each bounded by `modulus`.
-    ///
-    /// Not to be confused with the secure evaluation upper bound $\PT_{\sf eval}$ to which a mask is added.
-    fn evaluation_upper_bound<const DIMENSION: usize>(
-        ciphertexts_and_upper_bounds: &[(
-            Self::CiphertextSpaceGroupElement,
-            Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-        ); DIMENSION],
-        modulus: &Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
-    ) -> Result<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>> {
-        let upper_bounds_sum = ciphertexts_and_upper_bounds
-            .iter()
-            .map(|(_, upper_bound)| upper_bound)
-            .fold(Some(Uint::ZERO), |sum, upper_bound| {
-                sum.and_then(|sum| sum.checked_add(upper_bound).into())
-            })
-            .ok_or(Error::SecureFunctionEvaluation)?;
-
-        Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(upper_bounds_sum.checked_mul(&modulus))
-            .ok_or(Error::SecureFunctionEvaluation)
-    }
-
     /// Samples the mask $\omega$ is uniformly from $[0,2^s\PTsum)$, as required for secure function evaluation.
     fn sample_mask_for_secure_function_evaluation<const DIMENSION: usize>(
         ciphertexts_and_upper_bounds: &[(
@@ -272,8 +255,18 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         public_parameters: &Self::PublicParameters,
         rng: &mut impl CryptoRngCore,
     ) -> Result<Self::PlaintextSpaceGroupElement> {
-        let evaluation_upper_bound =
-            Self::evaluation_upper_bound(&ciphertexts_and_upper_bounds, modulus)?;
+        let upper_bounds_sum = ciphertexts_and_upper_bounds
+            .iter()
+            .map(|(_, upper_bound)| upper_bound)
+            .fold(Some(Uint::ZERO), |sum, upper_bound| {
+                sum.and_then(|sum| sum.checked_add(upper_bound).into())
+            })
+            .ok_or(Error::SecureFunctionEvaluation)?;
+
+        let evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
+            upper_bounds_sum.checked_mul(&modulus),
+        )
+        .ok_or(Error::SecureFunctionEvaluation)?;
 
         let mask_upper_bound = evaluation_upper_bound.checked_mul(
             &(Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::ONE << StatisticalSecuritySizedNumber::BITS),

@@ -367,7 +367,7 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     ) -> CtOption<EncryptionKey::PlaintextSpaceGroupElement>;
 }
 
-/// A Decryption Key Share of a Threshold Additively Homomorphic Encryption scheme
+/// A Decryption Key Share of a Threshold Additively Homomorphic Encryption scheme.
 pub trait AdditivelyHomomorphicDecryptionKeyShare<
     const PLAINTEXT_SPACE_SCALAR_LIMBS: usize,
     EncryptionKey: AdditivelyHomomorphicEncryptionKey<PLAINTEXT_SPACE_SCALAR_LIMBS>,

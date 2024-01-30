@@ -1,12 +1,14 @@
-// Author: dWallet Labs, Ltd.
-// SPDX-License-Identifier: BSD-3-Clause-Clear
-use crypto_bigint::subtle::CtOption;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::ops::BitAnd;
+
+use crypto_bigint::subtle::{Choice, CtOption};
+use crypto_bigint::CheckedAdd;
 use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
 use crypto_bigint::{NonZero, RandomMod};
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-
-use crypto_bigint::CheckedAdd;
+// Author: dWallet Labs, Ltd.
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+use crypto_bigint::subtle::ConstantTimeLess;
 use group::{
     GroupElement, KnownOrderGroupElement, KnownOrderScalar, PartyID, Samplable,
     StatisticalSecuritySizedNumber,

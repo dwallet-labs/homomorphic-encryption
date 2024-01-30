@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 use std::fmt::Debug;
+use std::ops::BitAnd;
 
+use crypto_bigint::subtle::Choice;
+use crypto_bigint::subtle::ConstantTimeLess;
 use crypto_bigint::CheckedAdd;
 use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
 use crypto_bigint::{NonZero, RandomMod};
@@ -251,7 +254,6 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             Self::CiphertextSpaceGroupElement,
             Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         ); DIMENSION],
-        modulus: &Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>,
         public_parameters: &Self::PublicParameters,
         rng: &mut impl CryptoRngCore,
     ) -> Result<Self::PlaintextSpaceGroupElement> {
@@ -263,12 +265,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             })
             .ok_or(Error::SecureFunctionEvaluation)?;
 
-        let evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
-            upper_bounds_sum.checked_mul(&modulus),
-        )
-        .ok_or(Error::SecureFunctionEvaluation)?;
-
-        let mask_upper_bound = evaluation_upper_bound.checked_mul(
+        let mask_upper_bound = upper_bounds_sum.checked_mul(
             &(Uint::<PLAINTEXT_SPACE_SCALAR_LIMBS>::ONE << StatisticalSecuritySizedNumber::BITS),
         );
 
@@ -307,9 +304,20 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             rng,
         )?;
 
+        // First, verify that each coefficient $a_i$ is smaller then the modulus $q$.
+        if !bool::from(
+            coefficients
+                .iter()
+                .fold(Choice::from(1u8), |choice, coefficient| {
+                    choice.bitand(coefficient.value().into().ct_lt(modulus))
+                }),
+        ) {
+            return Err(Error::SecureFunctionEvaluation);
+        }
+
+        // Then sample the mask uniformly from $[0,2^s\PTsum)$.
         let mask = Self::sample_mask_for_secure_function_evaluation(
             &ciphertexts_and_upper_bounds,
-            modulus,
             public_parameters,
             rng,
         )?;

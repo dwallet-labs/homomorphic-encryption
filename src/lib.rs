@@ -1,21 +1,20 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::ops::BitAnd;
+use std::{collections::HashMap, fmt::Debug, ops::BitAnd};
 
-use crypto_bigint::subtle::{Choice, CtOption};
-use crypto_bigint::CheckedAdd;
-use crypto_bigint::{rand_core::CryptoRngCore, CheckedMul, Uint};
-use crypto_bigint::{NonZero, RandomMod};
 // Author: dWallet Labs, Ltd.
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 use crypto_bigint::subtle::ConstantTimeLess;
+use crypto_bigint::{
+    rand_core::CryptoRngCore,
+    subtle::{Choice, CtOption},
+    CheckedAdd, CheckedMul, NonZero, RandomMod, Uint,
+};
 use group::{
     GroupElement, KnownOrderGroupElement, KnownOrderScalar, PartyID, Samplable,
     StatisticalSecuritySizedNumber,
 };
 use serde::{Deserialize, Serialize};
 
-/// An error in encryption related operations.
+/// An error in encryption-related operations.
 #[derive(thiserror::Error, Clone, Debug, PartialEq)]
 pub enum Error {
     #[error("group error")]
@@ -28,7 +27,7 @@ pub enum Error {
     SecureFunctionEvaluation,
 }
 
-/// The Result of the `new()` operation of types implementing the
+/// The Result of `new()` operation for types implementing the
 /// [`AdditivelyHomomorphicEncryptionKey`] trait.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -46,7 +45,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     ///
     /// Used in [`Self::encrypt()`] to define the encryption algorithm.
     /// As such, it uniquely identifies the encryption-scheme (alongside the type `Self`) and will
-    /// be used for Fiat-Shamir Transcripts).
+    /// be used for Fiat-Shamir Transcripts.
     type PublicParameters: AsRef<
             GroupsPublicParameters<
                 PlaintextSpacePublicParameters<PLAINTEXT_SPACE_SCALAR_LIMBS, Self>,
@@ -66,7 +65,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     /// $\Enc(pk, \pt; \eta_{\sf enc}) \to \ct$: Encrypt `plaintext` to `self` using
     /// `randomness`.
     ///
-    /// A deterministic algorithm that on input a public key $pk$, a plaintext $\pt \in \calP_{pk}$
+    /// A deterministic algorithm that inputs a public key $pk$, a plaintext $\pt \in \calP_{pk}$
     /// and randomness $\eta_{\sf enc} \in \calR_{pk}$, outputs a ciphertext $\ct \in \calC_{pk}$.
     fn encrypt_with_randomness(
         &self,
@@ -76,8 +75,9 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     ) -> Self::CiphertextSpaceGroupElement;
 
     /// $\Enc(pk, \pt)$: a probabilistic algorithm that first uniformly samples `randomness`
-    /// $\eta_{\sf enc} \in \calR_{pk}$ from `rng` and then calls [`Self::
-    /// encrypt_with_randomness()`] to encrypt `plaintext` to `self` using the sampled randomness.
+    /// $\eta_{\sf enc} \in \calR_{pk}$ from `rng` and then calls
+    /// [`Self::encrypt_with_randomness()`] to encrypt `plaintext` to `self` using the sampled
+    /// randomness.
     fn encrypt(
         &self,
         plaintext: &Self::PlaintextSpaceGroupElement,
@@ -88,7 +88,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Self::CiphertextSpaceGroupElement,
     )> {
         let randomness = Self::RandomnessSpaceGroupElement::sample(
-            &public_parameters.randomness_space_public_parameters(),
+            public_parameters.randomness_space_public_parameters(),
             rng,
         )?;
 
@@ -131,41 +131,48 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
     ///
     /// For an affine transformation, prepend ciphertexts with $\ct_0 = \Enc(1)$.
     ///
-    /// _Secure function evaluation_ states that giving the resulting ciphertext of the above evaluation
-    /// to the decryption key owner for decryption does not reveal anything about $f$
+    /// _Secure function evaluation_ states that giving the resulting ciphertext of the above
+    /// evaluation to the decryption key owner for decryption does not reveal anything about $f$
     /// except what can be learned from the (decrypted) result alone.
     ///
     /// This is ensured by masking the linear combination with a random (`mask`)
-    /// multiplication $\omega$ of the `modulus` $q$, and adding a fresh `randomness` $\eta$, which can be thought of as decrypting and re-encrypting with a fresh randomness:
+    /// multiplication $\omega$ of the `modulus` $q$, and adding a fresh `randomness` $\eta$, which
+    /// can be thought of as decrypting and re-encrypting with a fresh randomness:
     /// \ct = \Enc(pk, \omega q; \eta) \bigoplus_{i=1}^\ell \left(  a_i \odot \ct_i  \right)
     ///
     /// Let $\PT_i$ be the upper bound associated with $\ct_i$ (that is, this is the maximal value
     /// one obtains from decrypting $\ct_i$, but without reducing modulo $q$),
-    /// where $\omega$ is uniformly chosen from $[0,2^s\PTsum)$ and $\eta$ is uniformly chosen from $\ZZ_N^*$.
+    /// where $\omega$ is uniformly chosen from $[0,2^s\PTsum)$ and $\eta$ is uniformly chosen from
+    /// $\ZZ_N^*$.
     /// Then, the upper bound associated with the resulting $\ct$ is
     /// $$ \PT_{\sf eval} = (2^s+1)\cdot q\cdot \PTsum $$ and
     /// Correctness is assured as long as $\PT_{\sf eval}<N$.
     ///
     /// In more detail, these steps are taken to generically assure circuit privacy:
-    /// 1. Re-randomization. This should be done by adding an encryption of zero with fresh
+    /// 1. Re-randomization.
+    /// This should be done by adding an encryption of zero with fresh
     ///    (uniformly sampled) randomness to the outputted ciphertext.
     ///
-    /// 2. Masking. Our evaluation should be masked by a random multiplication of the homomorphic
+    /// 2. Masking.
+    /// Our evaluation should be masked by a random multiplication of the homomorphic
     ///    evaluation group order $q$.
     ///
     ///    While the decryption modulo $q$ will remain correct,
-    ///    assuming that the mask was "big enough", i.e. $\omega$ is uniformly chosen from $[0,2^s\PTsum)$,
-    ///    the decryption will also be statistically indistinguishable from random.
+    ///    assuming that the mask was "big enough", i.e., $\omega$ is uniformly chosen from
+    /// $[0,2^s\PTsum)$, The decryption will also be statistically indistinguishable from
+    /// random.
     ///
-    ///    *NOTE*: this function does not (and in fact, cannot) guarantee that
-    ///    each of the given ciphertexts $\ct_i$ are in fact bounded by its corresponding upper bound $\PT_i$.
-    ///    Instead, this responsibility is on the caller, which needs to assure that
-    ///    by verifying appropriate zero-knowledge (and range) proofs.
+    ///    *NOTE*: this function cannot (and in fact, does not) guarantee that
+    ///    each of the given ciphertexts $\ct_i$ is in fact bounded by its corresponding
+    ///    upper-bound $\PT_i$.
+    ///    Instead, this responsibility is on the caller, which needs to ensure
+    ///    that by verifying appropriate zero-knowledge (and range) proofs.
     ///    An exception to the above is when the ciphertext was encrypted by the caller,
     ///    in which case the caller knows the corresponding plaintext.
     ///
-    /// 3. No modulations. The size of our evaluation $\PT_{\sf eval}$ should be smaller than the order of
-    ///    the encryption plaintext group $N$ in order to assure it does not go through modulation
+    /// 3. No modulations.
+    /// The size of our evaluation $\PT_{\sf eval}$ should be smaller than the
+    ///    order of the encryption plaintext group $N$ to ensure it does not go through modulation
     ///    in the plaintext space.
     ///
     /// In the case that the plaintext order is the same as the evaluation `modulus`, steps 2, 3 are
@@ -204,8 +211,10 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         let plaintext = if &plaintext_order == modulus {
             coefficients[0].neutral()
         } else {
-            // Verify that the secure evaluation upper bound $\PT_{\sf eval}$ is smaller than the plaintext modulus $N$.
-            // This is done first by multiplying each of the coefficients by the corresponding upper bound:
+            // Verify that the secure evaluation upper bound $\PT_{\sf eval}$ is smaller than the
+            // plaintext modulus $N$.
+            // This is done first by multiplying each of the coefficients by the corresponding upper
+            // bound:
             let evaluation_upper_bound: Uint<PLAINTEXT_SPACE_SCALAR_LIMBS> =
                 ciphertexts_and_upper_bounds
                     .iter()
@@ -218,7 +227,8 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
                     .and_then(|evaluation_upper_bound| evaluation_upper_bound.into())
                     .ok_or(Error::SecureFunctionEvaluation)?;
 
-            // And then adding the mask by modulus $ \omega q $, to result with the secure evaluation upper bound $\PT_{\sf eval}$:
+            // And then adding the mask by modulus $ \omega q $, to result with the secure
+            // evaluation upper bound $\PT_{\sf eval}$:
             let secure_evaluation_upper_bound = Option::<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>>::from(
                 mask.value()
                     .into()
@@ -229,7 +239,8 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
             )
             .ok_or(Error::SecureFunctionEvaluation)?;
 
-            // And finally checking that it is smaller than the plaintext order $ $\PT_{\sf eval}$ < N $:
+            // And finally, checking that it is smaller than the plaintext order
+            // $ $\PT_{\sf eval}$ < N $:
             if secure_evaluation_upper_bound >= plaintext_order {
                 return Err(Error::SecureFunctionEvaluation);
             }
@@ -248,7 +259,8 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Ok(linear_combination + encryption_with_fresh_randomness)
     }
 
-    /// Samples the mask $\omega$ is uniformly from $[0,2^s\PTsum)$, as required for secure function evaluation.
+    /// Samples the mask $\omega$ is uniformly from $[0,2^s\PTsum)$, as required for secure function
+    /// evaluation.
     fn sample_mask_for_secure_function_evaluation<const DIMENSION: usize>(
         ciphertexts_and_upper_bounds: &[(
             Self::CiphertextSpaceGroupElement,
@@ -260,9 +272,12 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         let upper_bounds_sum = ciphertexts_and_upper_bounds
             .iter()
             .map(|(_, upper_bound)| upper_bound)
-            .fold(Some(Uint::ZERO), |sum, upper_bound| {
-                sum.and_then(|sum| sum.checked_add(upper_bound).into())
-            })
+            .try_fold(
+                Uint::ZERO,
+                |sum, upper_bound| -> Option<Uint<PLAINTEXT_SPACE_SCALAR_LIMBS>> {
+                    sum.checked_add(upper_bound).into()
+                },
+            )
             .ok_or(Error::SecureFunctionEvaluation)?;
 
         let mask_upper_bound = upper_bounds_sum.checked_mul(
@@ -282,7 +297,7 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 
     /// $\Eval(pk,f, \ct_1,\ldots,\ct_t; \eta_{\sf eval})$: Secure function evaluation.
     ///
-    /// This is the probabilistic linear combination algorithm which samples `mask` and `randomness`
+    /// This is the probabilistic linear combination algorithm that samples `mask` and `randomness`
     /// from `rng` and calls [`Self::securely_evaluate_linear_combination_with_randomness()`].
     fn securely_evaluate_linear_combination<const DIMENSION: usize>(
         &self,
@@ -300,11 +315,11 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
         Self::CiphertextSpaceGroupElement,
     )> {
         let randomness = Self::RandomnessSpaceGroupElement::sample(
-            &public_parameters.randomness_space_public_parameters(),
+            public_parameters.randomness_space_public_parameters(),
             rng,
         )?;
 
-        // First, verify that each coefficient $a_i$ is smaller then the modulus $q$.
+        // First, verify that each coefficient $a_i$ is smaller than the modulus $q$.
         if !bool::from(
             coefficients
                 .iter()
@@ -352,14 +367,23 @@ pub trait AdditivelyHomomorphicDecryptionKey<
     ) -> Result<Self>;
 
     /// $\Dec(sk, \ct) \to \pt$: Decrypt `ciphertext` using `decryption_key`.
-    /// A deterministic algorithm that on input a secret key $sk$ and a ciphertext $\ct \in
+    /// A deterministic algorithm that inputs a secret key $sk$ and a ciphertext $\ct \in
     /// \calC_{pk}$ outputs a plaintext $\pt \in \calP_{pk}$.
     ///
-    /// SECURITY NOTE: in some decryption schemes, like RLWE-based schemes, decryption can fail, and this could in turn leak secret data if not handled carefully.
-    /// In this case, this function must execute in constant time. However, that isn't sufficient; the caller must also handle the results in constant time.
-    /// One way is by verifying zero-knowledge proofs before decrypting, so you only decrypt when you know you've succeeded.
-    /// Another is the classic way of handling `CtOption`, which is to perform some computation over garbage (e.g. `Default`) values if `.is_none()`.
-    /// An example for this is RLWE-based key-exchange protocols, where you decrypt and if you fail you perform the computation over a garbage value and send it anyway.
+    /// SECURITY NOTE: in some decryption schemes, like RLWE-based schemes, decryption can fail, and
+    /// this could in turn leak secret data if not handled carefully.
+    /// In this case, this
+    /// function must execute in constant time.
+    /// However, that isn't sufficient; the caller must also
+    /// handle the results in constant time.
+    /// One way is by verifying zero-knowledge proofs
+    /// before decrypting, so you only decrypt when you know you've succeeded.
+    /// Another is the
+    /// classic way of handling `CtOption`, which is to perform some computation over garbage (e.g.
+    /// `Default`) values if `.is_none()`.
+    /// An example for this is RLWE-based key-exchange
+    /// protocols, where you decrypt and if you fail, you perform the computation over a garbage
+    /// value and send it anyway.
     fn decrypt(
         &self,
         ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
@@ -396,8 +420,8 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// An error in threshold decryption.
     type Error: Debug;
 
-    /// Instantiate the decryption key share from the public parameters of the threshold decryption scheme,
-    /// and the secret key share.
+    /// Instantiate the decryption key share from the public parameters of the threshold decryption
+    /// scheme, and the secret key share.
     fn new(
         party_id: PartyID,
         secret_key_share: Self::SecretKeyShare,
@@ -407,17 +431,19 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// The Semi-honest variant of Partial Decryption, returns the decryption share without proving
     /// correctness.
     ///
-    /// SECURITY NOTE: see corresponding note in [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
+    /// SECURITY NOTE: see the corresponding note in
+    /// [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
     fn generate_decryption_share_semi_honest(
         &self,
         ciphertext: &EncryptionKey::CiphertextSpaceGroupElement,
         public_parameters: &Self::PublicParameters,
     ) -> CtOption<Self::DecryptionShare>;
 
-    /// Performs the Maliciously-secure Partial Decryption in which decryption shares are computed
+    /// Performs the Maliciously secure Partial Decryption in which decryption shares are computed
     /// and proven correct.
     ///
-    /// SECURITY NOTE: see corresponding note in [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
+    /// SECURITY NOTE: see the corresponding note in
+    /// [`AdditivelyHomomorphicDecryptionKey::decrypt`]; the same applies here.
     fn generate_decryption_shares(
         &self,
         ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
@@ -426,14 +452,18 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     ) -> CtOption<(Vec<Self::DecryptionShare>, Self::PartialDecryptionProof)>;
 
     /// Compute the lagrange coefficient of party `party_id`.
-    /// Used for threshold decryption, where the lagrange coefficients of the current decrypters set is required.
+    /// Used for threshold decryption, where the lagrange coefficients of the current decrypters set
+    /// are required.
     ///
-    /// Since the number of subsets of size `threshold` of the parties set whose size is `number_of_parties` grow super-exponentially,
-    /// these values cannot be computed ahead of time and included in `Self::PublicParameters`.
+    /// Since the number of subsets of size `threshold` for the parties set whose size is
+    /// `number_of_parties` grow super-exponentially, these values cannot be computed ahead of
+    /// time and included in `Self::PublicParameters`.
     ///
-    /// Instead, they should be lazily computed according to the participating parties in a given threshold decryption session.
-    /// That being said, these can be cached so if there is a default set of decrypters, or one that decrypts more than once,
-    /// these values can be computed only once for that set.
+    /// Instead, they should be lazily computed according to the participating parties in a given
+    /// threshold decryption session.
+    /// That being said, these can be cached, so if there is a
+    /// default set of decrypters, or one that decrypts more than once, these values can be
+    /// computed only once for that set.
     fn compute_lagrange_coefficient(
         party_id: PartyID,
         number_of_parties: PartyID,
@@ -445,7 +475,8 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     /// Semi-Honest variant in which no proofs are verified.
     ///
     /// Correct decryption isn't assured upon success,
-    /// and one should be able to verify the output independently or trust the process was done correctly.
+    /// and one should be able to verify the output independently or trust the process was done
+    /// correctly.
     fn combine_decryption_shares_semi_honest(
         decryption_shares: HashMap<PartyID, Self::DecryptionShare>,
         lagrange_coefficients: HashMap<PartyID, Self::LagrangeCoefficient>,
@@ -453,7 +484,7 @@ pub trait AdditivelyHomomorphicDecryptionKeyShare<
     ) -> std::result::Result<EncryptionKey::PlaintextSpaceGroupElement, Self::Error>;
 
     /// Finalizes the Threshold Decryption protocol by combining decryption shares. This is the
-    /// Maliciously-secure variant in which the corresponding zero-knowledge proofs are verified,
+    /// Maliciously secure variant in which the corresponding zero-knowledge proofs are verified,
     /// and correct decryption is assured upon success.
     fn combine_decryption_shares(
         ciphertexts: Vec<EncryptionKey::CiphertextSpaceGroupElement>,
@@ -593,13 +624,13 @@ pub mod tests {
             .unwrap();
 
         let (_, ciphertext) = encryption_key
-            .encrypt(&plaintext, &public_parameters, rng)
+            .encrypt(&plaintext, public_parameters, rng)
             .unwrap();
 
         assert_eq!(
             plaintext,
             decryption_key
-                .decrypt(&ciphertext, &public_parameters)
+                .decrypt(&ciphertext, public_parameters)
                 .unwrap(),
             "decrypted ciphertext should match the plaintext"
         );
@@ -662,15 +693,15 @@ pub mod tests {
         .unwrap();
 
         let (_, encrypted_two) = encryption_key
-            .encrypt(&two, &public_parameters, rng)
+            .encrypt(&two, public_parameters, rng)
             .unwrap();
 
         let (_, encrypted_five) = encryption_key
-            .encrypt(&five, &public_parameters, rng)
+            .encrypt(&five, public_parameters, rng)
             .unwrap();
 
         let (_, encrypted_seven) = encryption_key
-            .encrypt(&seven, &public_parameters, rng)
+            .encrypt(&seven, public_parameters, rng)
             .unwrap();
 
         let evaluted_ciphertext = encrypted_five.scalar_mul(&U64::from(1u64))
@@ -688,7 +719,7 @@ pub mod tests {
         assert_eq!(
             expected_evaluation_result,
             decryption_key
-                .decrypt(&evaluted_ciphertext, &public_parameters)
+                .decrypt(&evaluted_ciphertext, public_parameters)
                 .unwrap()
         );
 
@@ -699,7 +730,7 @@ pub mod tests {
         .unwrap();
 
         let evaluation_order = (&EvaluationGroupElement::order_from_public_parameters(
-            &evaluation_group_public_parameters,
+            evaluation_group_public_parameters,
         ))
             .into();
 
@@ -733,14 +764,14 @@ pub mod tests {
         );
 
         assert_ne!(
-            decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap(),
-            decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap(),
+            decryption_key.decrypt(&evaluted_ciphertext, public_parameters).unwrap(),
+            decryption_key.decrypt(&privately_evaluted_ciphertext, public_parameters).unwrap(),
             "decryptions of privately evaluated linear combinations should be statistically indistinguishable from straightforward ones"
         );
 
         assert_eq!(
-            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext, &public_parameters).unwrap().value()),
-            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext, &public_parameters).unwrap().value()),
+            EvaluationGroupElement::from(decryption_key.decrypt(&evaluted_ciphertext, public_parameters).unwrap().value()),
+            EvaluationGroupElement::from(decryption_key.decrypt(&privately_evaluted_ciphertext, public_parameters).unwrap().value()),
             "decryptions of privately evaluated linear combinations should match straightforward ones modulu the evaluation group order"
         );
     }

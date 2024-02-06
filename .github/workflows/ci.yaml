@@ -14,7 +14,6 @@ concurrency:
 env:
   RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
-  # Change to specific Rust release to pin
   rust_stable: stable
   rust_nightly: nightly
   CARGO_NET_GIT_FETCH_WITH_CLI: true

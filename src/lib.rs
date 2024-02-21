@@ -1,3 +1,6 @@
+// Author: dWallet Labs, Ltd.
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 use std::{collections::HashMap, fmt::Debug, ops::BitAnd};
 
 // Author: dWallet Labs, Ltd.

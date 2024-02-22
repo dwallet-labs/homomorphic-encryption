@@ -117,12 +117,12 @@ pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS:
 
         let neutral = ciphertexts[0].neutral();
 
-        Ok(coefficients.iter().zip(ciphertexts.iter()).fold(
-            neutral,
-            |curr, (coefficient, ciphertext)| {
-                curr + ciphertext.scalar_mul(&coefficient.value().into())
-            },
-        ))
+        let x = coefficients
+            .iter()
+            .zip(ciphertexts.iter())
+            .map(|(coefficient, ciphertext)| ciphertext.scalar_mul(&coefficient.value().into()))
+            .collect::<Vec<_>>();
+        Ok(x.into_iter().fold(neutral, |curr, x| curr + x))
     }
 
     /// $\Eval(pk,f, \ct_1,\ldots,\ct_\ell; \omega, \eta)$: Secure function evaluation.

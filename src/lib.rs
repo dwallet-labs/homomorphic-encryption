@@ -38,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait AdditivelyHomomorphicEncryptionKey<const PLAINTEXT_SPACE_SCALAR_LIMBS: usize>:
     PartialEq + Clone + Debug + Eq
 {
-    type PlaintextSpaceGroupElement: KnownOrderScalar<PLAINTEXT_SPACE_SCALAR_LIMBS> + Samplable;
+    type PlaintextSpaceGroupElement: KnownOrderScalar<PLAINTEXT_SPACE_SCALAR_LIMBS>;
     type RandomnessSpaceGroupElement: GroupElement + Samplable;
     type CiphertextSpaceGroupElement: GroupElement;
 
